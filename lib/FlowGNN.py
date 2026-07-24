@@ -19,24 +19,23 @@ class FlowGNN(nn.Module):
     but require larger memory space.
     """
 
-    def __init__(self, teal_env, num_layer):
+    def __init__(self, teal_env, num_layer, gate=True):
         """Initialize flowGNN with the network topology.
 
         Args:
             teal_env: teal environment
             num_layer: num of layers in flowGNN
+            gate: whether to gate path->edge messages from unobserved paths
         """
 
         super(FlowGNN, self).__init__()
 
         self.env = teal_env
         self.num_layer = num_layer
+        self.gate = gate
 
-        self.edge_index = self.env.edge_index
-        self.edge_index_values = self.env.edge_index_values
-        self.num_path = self.env.num_path
-        self.num_path_node = self.env.num_path_node
-        self.num_edge_node = self.env.num_edge_node
+        # load graph structures from env (rebuildable via refresh_graph)
+        self.refresh_graph()
         # self.adj_adj = torch.sparse_coo_tensor(self.edge_index,
         #    self.edge_index_values,
         #    [self.num_path_node + self.num_edge_node,
@@ -56,6 +55,39 @@ class FlowGNN(nn.Module):
         # weight initialization for dnn and gnn
         self.apply(weight_initialization)
 
+    def refresh_graph(self):
+        """Reload graph structures from env.
+        Called after env rebuilds the demand set (demand_split): all
+        learnable weights are shared across demands and thus unchanged.
+        """
+
+        self.edge_index = self.env.edge_index
+        self.edge_index_values = self.env.edge_index_values
+        self.num_path = self.env.num_path
+        self.num_path_node = self.env.num_path_node
+        self.num_edge_node = self.env.num_edge_node
+        # sparse gating: block path->edge messages from unobserved paths
+        # so that mask embeddings do not pollute edge-node features, while
+        # edge->path messages are kept for unobserved paths to sense links
+        self.gated_index_values = self._gate_index_values() \
+            if self.gate else self.edge_index_values
+
+    def _gate_index_values(self):
+        """Return edge_index_values with unobserved path->edge entries zeroed.
+        edge_index is [src+dst, dst+src] where src are path nodes (with
+        edge-node offset) and dst are edge nodes. In spmm the row receives
+        messages, so the second half (row=edge, col=path) carries path->edge
+        messages and is gated by the observation mask at demand level.
+        """
+
+        # demand-level mask expanded to path level
+        path_mask = self.env.obs_mask.repeat_interleave(self.num_path)
+        num_pe = self.edge_index.shape[1] // 2
+        gate = torch.ones_like(self.edge_index_values)
+        gate[num_pe:] = path_mask[
+            self.edge_index[1, num_pe:] - self.num_edge_node]
+        return self.edge_index_values * gate
+
     def forward(self, h_0):
         """Return embeddings after forward propagation
 
@@ -72,7 +104,7 @@ class FlowGNN(nn.Module):
             h_i = self.gnn_list[i](h_i)
             # h_i = torch.sparse.mm(self.adj_adj, h_i)
             h_i = torch_sparse.spmm(
-                self.edge_index, self.edge_index_values,
+                self.edge_index, self.gated_index_values,
                 h_0.shape[0], h_0.shape[0], h_i)
 
             # dnn

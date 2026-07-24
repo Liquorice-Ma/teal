@@ -14,10 +14,13 @@ PROBLEM_NAMES = [
     'UsCarrier.json',
     'Kdl.json',
     'ASN2k.json',
+    'Starlink2224.json',
+    'Starlink2272.json',
 ]
 TM_MODELS = [
     "real",
     "toy",
+    "starlink",
 ]
 SCALE_FACTORS = [1.0]
 OBJ_STRS = ["total_flow", "min_max_link_util"]
@@ -108,6 +111,9 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         '--devid', type=int, default=0,
         help='GPU device id')
     parser.add_argument(
+        '--seed', type=int, default=0,
+        help='random seed for reproducibility')
+    parser.add_argument(
         '--model-save', type=bool, default=False,
         help='whether to save model')
 
@@ -130,6 +136,39 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
     parser.add_argument(
         '--slice-test-stop', type=int, default=36,
         help="end index of testing")
+
+    # sparse observation hyper-parameters
+    parser.add_argument(
+        '--obs-ratio', type=float, default=1.0,
+        help='ratio of observed node pairs in sparse traffic matrices')
+    parser.add_argument(
+        '--obs-type', type=str, default='flow', choices=['flow', 'node'],
+        help='sparse sampling granularity: flow-level samples demand '
+             'pairs; node-level samples source nodes whose outgoing '
+             'demands are all observed')
+    parser.add_argument(
+        '--hist-len', type=int, default=1,
+        help='number of historical traffic matrices as model input')
+    parser.add_argument(
+        '--prune-demands', dest='prune_demands', default=False,
+        action='store_true',
+        help='only keep node pairs with nonzero demand in any '
+             'traffic matrix (for sparse satellite traffic)')
+    parser.add_argument(
+        '--mask-mode', type=str, default='embed',
+        choices=['embed', 'zero', 'mean'],
+        help='how to fill unobserved demands: learnable mask embedding, '
+             'zero filling, or mean interpolation over observed demands '
+             '(two-stage complete-then-optimize baseline)')
+    parser.add_argument(
+        '--no-gate', dest='no_gate', default=False, action='store_true',
+        help='disable mask-aware gating in FlowGNN (ablation baseline)')
+    parser.add_argument(
+        '--demand-split', dest='demand_split', default=False,
+        action='store_true',
+        help='build demand set from training-slice TMs only, and rebuild '
+             'from test-slice TMs at test time with the same weights '
+             '(zero-retraining generalization, requires --prune-demands)')
 
     # actor hyper-parameters
     parser.add_argument(

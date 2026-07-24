@@ -4,7 +4,9 @@ from teal_helper import get_args_and_problems, print_, PATH_FORM_HYPERPARAMS
 
 import os
 import sys
+import random
 
+import numpy as np
 import torch
 
 sys.path.append('..')
@@ -44,11 +46,25 @@ def benchmark(problems, output_csv, arg):
     device = torch.device(
         f"cuda:{args.devid}" if torch.cuda.is_available() else "cpu")
 
+    # fix random seeds for reproducibility
+    random.seed(args.seed)
+    np.random.seed(args.seed)
+    torch.manual_seed(args.seed)
+    torch.cuda.manual_seed_all(args.seed)
+
     # ========== load hyperparameters
     # env hyper-parameters
     train_size = [args.slice_train_start, args.slice_train_stop]
     val_size = [args.slice_val_start, args.slice_val_stop]
     test_size = [args.slice_test_start, args.slice_test_stop]
+    # sparse observation hyper-parameters
+    obs_ratio = args.obs_ratio
+    obs_type = args.obs_type
+    hist_len = args.hist_len
+    prune_demands = args.prune_demands
+    demand_split = args.demand_split
+    mask_mode = args.mask_mode
+    gate = not args.no_gate
     # actor hyper-parameters
     num_layer = args.layers
     rho = args.rho
@@ -75,13 +91,20 @@ def benchmark(problems, output_csv, arg):
         val_size=val_size,
         test_size=test_size,
         num_failure=num_failure,
-        device=device)
+        device=device,
+        obs_ratio=obs_ratio,
+        obs_type=obs_type,
+        hist_len=hist_len,
+        prune_demands=prune_demands,
+        demand_split=demand_split)
     teal_actor = TealActor(
         teal_env=teal_env,
         num_layer=num_layer,
         model_dir=MODEL_DIR,
         model_save=model_save,
-        device=device)
+        device=device,
+        mask_mode=mask_mode,
+        gate=gate)
     teal = Teal(
         teal_env=teal_env,
         teal_actor=teal_actor,
