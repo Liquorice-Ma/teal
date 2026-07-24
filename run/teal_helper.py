@@ -149,6 +149,13 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         action='store_true',
         help='only keep node pairs with nonzero demand in any '
              'traffic matrix (for sparse satellite traffic)')
+    parser.add_argument(
+        '--mask-mode', type=str, default='embed', choices=['embed', 'zero'],
+        help='how to fill unobserved demands: learnable mask embedding '
+             'or zero filling (ablation baseline)')
+    parser.add_argument(
+        '--no-gate', dest='no_gate', default=False, action='store_true',
+        help='disable mask-aware gating in FlowGNN (ablation baseline)')
 
     # actor hyper-parameters
     parser.add_argument(

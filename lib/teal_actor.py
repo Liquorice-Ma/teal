@@ -18,6 +18,7 @@ class TealActor(nn.Module):
 
     def __init__(
             self, teal_env, num_layer, model_dir, model_save, device,
+            mask_mode='embed', gate=True,
             std=1, log_std_min=-10.0, log_std_max=10.0):
         """Initialize teal actor.
 
@@ -27,6 +28,9 @@ class TealActor(nn.Module):
             model_dir: model save directory
             model_save: whether to save the model
             device: device id
+            mask_mode: fill unobserved demands with learnable mask
+                embedding ('embed') or zeros ('zero', ablation baseline)
+            gate: whether to enable mask-aware gating in flowGNN
             std: std value, -1 if apply neuro networks for std
             log_std_min: lower bound for log std
             log_std_max: upper bound for log std
@@ -41,7 +45,8 @@ class TealActor(nn.Module):
 
         # init FlowGNN
         self.device = device
-        self.FlowGNN = FlowGNN(self.env, num_layer).to(self.device)
+        self.mask_mode = mask_mode
+        self.FlowGNN = FlowGNN(self.env, num_layer, gate=gate).to(self.device)
 
         # learnable mask embedding for unobserved demands
         # replace masked-out entries instead of filling them with 0
@@ -91,9 +96,11 @@ class TealActor(nn.Module):
         """Return full name of the ML model."""
 
         return os.path.join(
-            model_dir, "{}_flowGNN-{}_std-{}_obs-{}_hist-{}.pt".format(
+            model_dir,
+            "{}_flowGNN-{}_std-{}_obs-{}_hist-{}_mask-{}_gate-{}.pt".format(
                 topo, num_layer, std < 0,
-                self.env.obs_ratio, self.env.hist_len))
+                self.env.obs_ratio, self.env.hist_len,
+                self.mask_mode, self.FlowGNN.gate))
 
     def load_model(self):
         """Load from model fname."""
@@ -170,10 +177,13 @@ class TealActor(nn.Module):
         tm = obs['tm_seq'][-1]
         # demand-level mask expanded to path level
         path_mask = obs['mask'].repeat_interleave(self.num_path)
-        # unobserved entries take the learnable mask embedding
-        tm = tm * path_mask + \
-            self.mask_embedding.repeat(self.num_path_node//self.num_path) * \
-            (1 - path_mask)
+        # unobserved entries take the learnable mask embedding,
+        # or zeros in the ablation baseline
+        tm = tm * path_mask
+        if self.mask_mode == 'embed':
+            tm = tm + \
+                self.mask_embedding.repeat(
+                    self.num_path_node//self.num_path) * (1 - path_mask)
         feature = torch.concat([obs['capacity'], tm]).reshape(-1, 1)
         mean, std = self.forward(feature, obs['tm_seq'])
 

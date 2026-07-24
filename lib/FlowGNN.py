@@ -19,18 +19,20 @@ class FlowGNN(nn.Module):
     but require larger memory space.
     """
 
-    def __init__(self, teal_env, num_layer):
+    def __init__(self, teal_env, num_layer, gate=True):
         """Initialize flowGNN with the network topology.
 
         Args:
             teal_env: teal environment
             num_layer: num of layers in flowGNN
+            gate: whether to gate path->edge messages from unobserved paths
         """
 
         super(FlowGNN, self).__init__()
 
         self.env = teal_env
         self.num_layer = num_layer
+        self.gate = gate
 
         self.edge_index = self.env.edge_index
         self.edge_index_values = self.env.edge_index_values
@@ -40,7 +42,8 @@ class FlowGNN(nn.Module):
         # sparse gating: block path->edge messages from unobserved paths
         # so that mask embeddings do not pollute edge-node features, while
         # edge->path messages are kept for unobserved paths to sense links
-        self.gated_index_values = self._gate_index_values()
+        self.gated_index_values = self._gate_index_values() \
+            if gate else self.edge_index_values
         # self.adj_adj = torch.sparse_coo_tensor(self.edge_index,
         #    self.edge_index_values,
         #    [self.num_path_node + self.num_edge_node,

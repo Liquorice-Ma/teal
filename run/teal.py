@@ -61,6 +61,8 @@ def benchmark(problems, output_csv, arg):
     obs_ratio = args.obs_ratio
     hist_len = args.hist_len
     prune_demands = args.prune_demands
+    mask_mode = args.mask_mode
+    gate = not args.no_gate
     # actor hyper-parameters
     num_layer = args.layers
     rho = args.rho
@@ -96,7 +98,9 @@ def benchmark(problems, output_csv, arg):
         num_layer=num_layer,
         model_dir=MODEL_DIR,
         model_save=model_save,
-        device=device)
+        device=device,
+        mask_mode=mask_mode,
+        gate=gate)
     teal = Teal(
         teal_env=teal_env,
         teal_actor=teal_actor,
