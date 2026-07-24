@@ -155,9 +155,11 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         help='only keep node pairs with nonzero demand in any '
              'traffic matrix (for sparse satellite traffic)')
     parser.add_argument(
-        '--mask-mode', type=str, default='embed', choices=['embed', 'zero'],
-        help='how to fill unobserved demands: learnable mask embedding '
-             'or zero filling (ablation baseline)')
+        '--mask-mode', type=str, default='embed',
+        choices=['embed', 'zero', 'mean'],
+        help='how to fill unobserved demands: learnable mask embedding, '
+             'zero filling, or mean interpolation over observed demands '
+             '(two-stage complete-then-optimize baseline)')
     parser.add_argument(
         '--no-gate', dest='no_gate', default=False, action='store_true',
         help='disable mask-aware gating in FlowGNN (ablation baseline)')

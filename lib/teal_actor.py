@@ -29,7 +29,8 @@ class TealActor(nn.Module):
             model_save: whether to save the model
             device: device id
             mask_mode: fill unobserved demands with learnable mask
-                embedding ('embed') or zeros ('zero', ablation baseline)
+                embedding ('embed'), zeros ('zero'), or the mean of
+                observed demands ('mean', two-stage baseline)
             gate: whether to enable mask-aware gating in flowGNN
             std: std value, -1 if apply neuro networks for std
             log_std_min: lower bound for log std
@@ -178,12 +179,15 @@ class TealActor(nn.Module):
         # demand-level mask expanded to path level
         path_mask = obs['mask'].repeat_interleave(self.num_path)
         # unobserved entries take the learnable mask embedding,
-        # or zeros in the ablation baseline
+        # zeros, or the mean of observed demands
         tm = tm * path_mask
         if self.mask_mode == 'embed':
             tm = tm + \
                 self.mask_embedding.repeat(
                     self.num_path_node//self.num_path) * (1 - path_mask)
+        elif self.mask_mode == 'mean':
+            # mean interpolation: two-stage complete-then-optimize baseline
+            tm = tm + tm.sum()/path_mask.sum() * (1 - path_mask)
         feature = torch.concat([obs['capacity'], tm]).reshape(-1, 1)
         mean, std = self.forward(feature, obs['tm_seq'])
 
