@@ -163,6 +163,12 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
     parser.add_argument(
         '--no-gate', dest='no_gate', default=False, action='store_true',
         help='disable mask-aware gating in FlowGNN (ablation baseline)')
+    parser.add_argument(
+        '--demand-split', dest='demand_split', default=False,
+        action='store_true',
+        help='build demand set from training-slice TMs only, and rebuild '
+             'from test-slice TMs at test time with the same weights '
+             '(zero-retraining generalization, requires --prune-demands)')
 
     # actor hyper-parameters
     parser.add_argument(

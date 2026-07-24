@@ -62,6 +62,7 @@ def benchmark(problems, output_csv, arg):
     obs_type = args.obs_type
     hist_len = args.hist_len
     prune_demands = args.prune_demands
+    demand_split = args.demand_split
     mask_mode = args.mask_mode
     gate = not args.no_gate
     # actor hyper-parameters
@@ -94,7 +95,8 @@ def benchmark(problems, output_csv, arg):
         obs_ratio=obs_ratio,
         obs_type=obs_type,
         hist_len=hist_len,
-        prune_demands=prune_demands)
+        prune_demands=prune_demands,
+        demand_split=demand_split)
     teal_actor = TealActor(
         teal_env=teal_env,
         num_layer=num_layer,

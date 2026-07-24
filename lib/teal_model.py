@@ -50,6 +50,8 @@ class Teal():
         for epoch in range(num_epoch):
 
             self.env.reset('train')
+            # reload graph in case the demand set was rebuilt (demand_split)
+            self.actor.FlowGNN.refresh_graph()
 
             ids = range(self.env.idx_start, self.env.idx_stop)
             loop_obj = tqdm(
@@ -89,6 +91,7 @@ class Teal():
 
         self.actor.eval()
         self.env.reset('val')
+        self.actor.FlowGNN.refresh_graph()
 
         rewards = 0
         for idx in range(self.env.idx_start, self.env.idx_stop):
@@ -118,6 +121,9 @@ class Teal():
 
         self.actor.eval()
         self.env.reset('test')
+        # reload graph: with demand_split the test-time demand set is
+        # rebuilt from test TMs while model weights stay unchanged
+        self.actor.FlowGNN.refresh_graph()
 
         with open(output_csv, "a") as results:
             print_(",".join(output_header), file=results)

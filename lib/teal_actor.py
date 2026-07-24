@@ -42,7 +42,6 @@ class TealActor(nn.Module):
         # teal environment
         self.env = teal_env
         self.num_path = self.env.num_path
-        self.num_path_node = self.env.num_path_node
 
         # init FlowGNN
         self.device = device
@@ -148,8 +147,10 @@ class TealActor(nn.Module):
             h_fuse = (attention @ v).reshape(-1, self.d_fuse)
             x = torch.cat([x, h_fuse], dim=-1)
 
+        # num_path_node is read from env: it changes when the demand set
+        # is rebuilt (demand_split) while weights remain shared
         x = x.reshape(
-            self.num_path_node//self.num_path,
+            self.env.num_path_node//self.num_path,
             self.d_feature)
         mean = self.mean_linear(x)
 
@@ -184,7 +185,7 @@ class TealActor(nn.Module):
         if self.mask_mode == 'embed':
             tm = tm + \
                 self.mask_embedding.repeat(
-                    self.num_path_node//self.num_path) * (1 - path_mask)
+                    self.env.num_path_node//self.num_path) * (1 - path_mask)
         elif self.mask_mode == 'mean':
             # mean interpolation: two-stage complete-then-optimize baseline
             tm = tm + tm.sum()/path_mask.sum() * (1 - path_mask)

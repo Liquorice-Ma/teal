@@ -34,16 +34,8 @@ class FlowGNN(nn.Module):
         self.num_layer = num_layer
         self.gate = gate
 
-        self.edge_index = self.env.edge_index
-        self.edge_index_values = self.env.edge_index_values
-        self.num_path = self.env.num_path
-        self.num_path_node = self.env.num_path_node
-        self.num_edge_node = self.env.num_edge_node
-        # sparse gating: block path->edge messages from unobserved paths
-        # so that mask embeddings do not pollute edge-node features, while
-        # edge->path messages are kept for unobserved paths to sense links
-        self.gated_index_values = self._gate_index_values() \
-            if gate else self.edge_index_values
+        # load graph structures from env (rebuildable via refresh_graph)
+        self.refresh_graph()
         # self.adj_adj = torch.sparse_coo_tensor(self.edge_index,
         #    self.edge_index_values,
         #    [self.num_path_node + self.num_edge_node,
@@ -62,6 +54,23 @@ class FlowGNN(nn.Module):
 
         # weight initialization for dnn and gnn
         self.apply(weight_initialization)
+
+    def refresh_graph(self):
+        """Reload graph structures from env.
+        Called after env rebuilds the demand set (demand_split): all
+        learnable weights are shared across demands and thus unchanged.
+        """
+
+        self.edge_index = self.env.edge_index
+        self.edge_index_values = self.env.edge_index_values
+        self.num_path = self.env.num_path
+        self.num_path_node = self.env.num_path_node
+        self.num_edge_node = self.env.num_edge_node
+        # sparse gating: block path->edge messages from unobserved paths
+        # so that mask embeddings do not pollute edge-node features, while
+        # edge->path messages are kept for unobserved paths to sense links
+        self.gated_index_values = self._gate_index_values() \
+            if self.gate else self.edge_index_values
 
     def _gate_index_values(self):
         """Return edge_index_values with unobserved path->edge entries zeroed.

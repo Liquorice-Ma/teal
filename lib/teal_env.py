@@ -26,6 +26,7 @@ class TealEnv(object):
             num_path, edge_disjoint, dist_metric, rho,
             train_size, val_size, test_size, num_failure, device,
             obs_ratio=1.0, obs_type='flow', hist_len=1, prune_demands=False,
+            demand_split=False,
             raw_action_min=-10.0, raw_action_max=10.0):
         """Initialize Teal environment.
 
@@ -48,6 +49,9 @@ class TealEnv(object):
             hist_len: number of historical traffic matrices as model input
             prune_demands: only keep node pairs with nonzero demand in any
                 traffic matrix (for sparse satellite traffic)
+            demand_split: build demand set from training-slice TMs and
+                rebuild from test-slice TMs at test time (zero-retraining
+                generalization), requires prune_demands
             raw_action_min: min value when clamp raw action
             raw_action_max: max value when clamp raw action
         """
@@ -76,17 +80,41 @@ class TealEnv(object):
             [float(c_e) for u, v, c_e in self.G.edges.data('capacity')])
         self.num_edge_node = len(self.G.edges)
         # demand pairs: all node pairs, or pairs with nonzero demand
-        # in any traffic matrix when prune_demands is enabled
+        # in any traffic matrix when prune_demands is enabled;
+        # when demand_split is enabled, scan only the current slice so that
+        # the test-time demand set is rebuilt from test TMs
         self.prune_demands = prune_demands
-        self.demand_pairs = self._get_demand_pairs(prune_demands)
-        self.num_demand = len(self.demand_pairs)
+        self.demand_split = demand_split
+        self.rho = rho
+        self.pair_range = (self.train_start, self.train_stop) \
+            if demand_split else None
+        self._build_graph(
+            self._get_demand_pairs(prune_demands, self.pair_range))
+
+        # min/max value when clamp raw action
+        self.raw_action_min = raw_action_min
+        self.raw_action_max = raw_action_max
+
+        self.reset('train')
+
+    def _build_graph(self, demand_pairs):
+        """(Re)build all structures derived from the demand-pair set:
+        index tensors, path graph, observation mask and ADMM.
+        Model weights are independent of the demand-set size, so the graph
+        can be rebuilt at test time without retraining.
+        """
+
+        self.demand_pairs = demand_pairs
+        self.num_demand = len(demand_pairs)
         self.num_path_node = self.num_path * self.num_demand
         self.demand_src = torch.LongTensor(
             [s for s, t in self.demand_pairs])
         self.demand_dst = torch.LongTensor(
             [t for s, t in self.demand_pairs])
         self.edge_index, self.edge_index_values, self.p2e = \
-            self.get_topo_matrix(topo, num_path, edge_disjoint, dist_metric)
+            self.get_topo_matrix(
+                self.topo, self.num_path, self.edge_disjoint,
+                self.dist_metric)
 
         # binary mask over demands: 1 = observed, 0 = unobserved
         # fixed across train/val/test for reproducibility
@@ -95,13 +123,7 @@ class TealEnv(object):
         # init ADMM
         self.ADMM = ADMM(
             self.p2e, self.num_path, self.num_path_node,
-            self.num_edge_node, rho, self.device)
-
-        # min/max value when clamp raw action
-        self.raw_action_min = raw_action_min
-        self.raw_action_max = raw_action_max
-
-        self.reset('train')
+            self.num_edge_node, self.rho, self.device)
 
     def reset(self, mode='test'):
         """Reset the initial conditions in the beginning."""
@@ -112,22 +134,33 @@ class TealEnv(object):
             self.idx_start, self.idx_stop = self.test_start, self.test_stop
         else:
             self.idx_start, self.idx_stop = self.val_start, self.val_stop
+        # rebuild demand set from the TMs of the current slice when
+        # demand_split is enabled; val reuses the training demand set
+        if self.demand_split:
+            pair_range = (self.test_start, self.test_stop) if mode == 'test' \
+                else (self.train_start, self.train_stop)
+            if pair_range != self.pair_range:
+                self.pair_range = pair_range
+                self._build_graph(self._get_demand_pairs(
+                    self.prune_demands, pair_range))
         self.idx = self.idx_start
         self.obs = self._read_obs()
 
-    def _get_demand_pairs(self, prune_demands):
+    def _get_demand_pairs(self, prune_demands, pair_range=None):
         """Return list of demand pairs in source-major order.
         When prune_demands is enabled, only keep node pairs with nonzero
-        demand in any traffic matrix of the problem list.
+        demand in any traffic matrix within pair_range (all when None).
         """
 
         num_node = self.G.number_of_nodes()
         if not prune_demands:
             return [(s, t) for s in range(num_node) for t in range(num_node)
                     if s != t]
-        # union of nonzero demands across all traffic matrices
+        # union of nonzero demands across traffic matrices
+        problems = self.problems if pair_range is None \
+            else self.problems[pair_range[0]:pair_range[1]]
         nonzero = None
-        for _, _, tm_fname in self.problems:
+        for _, _, tm_fname in problems:
             with open(tm_fname, 'rb') as f:
                 tm = pickle.load(f)
             nonzero = (tm > 0) if nonzero is None else nonzero | (tm > 0)
@@ -469,9 +502,12 @@ class TealEnv(object):
     def path_full_fname(self, topo, num_path, edge_disjoint, dist_metric):
         """Return full name of the topology path."""
 
-        # pruned path dict only contains demand pairs with nonzero demand
+        # pruned path dict only contains demand pairs with nonzero demand;
+        # demand_split builds per-slice path dicts, so include the range
         pruned_str = "_pruned-{}".format(self.num_demand) \
             if self.prune_demands else ""
+        if self.pair_range is not None:
+            pruned_str += "_slice-{}-{}".format(*self.pair_range)
         return os.path.join(
             TOPOLOGIES_DIR, "paths", "path-form",
             "{}-{}-paths_edge-disjoint-{}_dist-metric-{}{}-dict.pkl".format(
