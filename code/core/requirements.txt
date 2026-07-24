@@ -1,0 +1,11 @@
+numpy
+scipy
+matplotlib
+torch
+torchaudio
+torchvision
+cupy-cuda12x
+matplotlib
+pandas
+joblib
+tqdm

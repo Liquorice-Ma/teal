@@ -14,10 +14,13 @@ PROBLEM_NAMES = [
     'UsCarrier.json',
     'Kdl.json',
     'ASN2k.json',
+    'Starlink2224.json',
+    'Starlink2272.json',
 ]
 TM_MODELS = [
     "real",
     "toy",
+    "starlink",
 ]
 SCALE_FACTORS = [1.0]
 OBJ_STRS = ["total_flow", "min_max_link_util"]
@@ -108,6 +111,9 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         '--devid', type=int, default=0,
         help='GPU device id')
     parser.add_argument(
+        '--seed', type=int, default=0,
+        help='random seed for reproducibility')
+    parser.add_argument(
         '--model-save', type=bool, default=False,
         help='whether to save model')
 
@@ -130,6 +136,19 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
     parser.add_argument(
         '--slice-test-stop', type=int, default=36,
         help="end index of testing")
+
+    # sparse observation hyper-parameters
+    parser.add_argument(
+        '--obs-ratio', type=float, default=1.0,
+        help='ratio of observed node pairs in sparse traffic matrices')
+    parser.add_argument(
+        '--hist-len', type=int, default=1,
+        help='number of historical traffic matrices as model input')
+    parser.add_argument(
+        '--prune-demands', dest='prune_demands', default=False,
+        action='store_true',
+        help='only keep node pairs with nonzero demand in any '
+             'traffic matrix (for sparse satellite traffic)')
 
     # actor hyper-parameters
     parser.add_argument(

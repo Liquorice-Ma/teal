@@ -14,7 +14,7 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
+# note: do NOT ignore lib/ -- it is the source directory of this repo
 lib64/
 parts/
 sdist/
@@ -161,3 +161,14 @@ cython_debug/
 
 # path folders
 topologies/paths/ncflow-edge-per-iter/
+
+# generated traffic matrices (rebuild with run/prepare_starlink.py)
+traffic-matrices/starlink/
+
+# experiment outputs
+run/teal-logs/
+run/teal-models/
+run/*.csv
+
+# macOS
+.DS_Store

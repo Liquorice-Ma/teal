@@ -25,6 +25,7 @@ class TealEnv(object):
             self, obj, topo, problems,
             num_path, edge_disjoint, dist_metric, rho,
             train_size, val_size, test_size, num_failure, device,
+            obs_ratio=1.0, hist_len=1, prune_demands=False,
             raw_action_min=-10.0, raw_action_max=10.0):
         """Initialize Teal environment.
 
@@ -39,7 +40,12 @@ class TealEnv(object):
             train size: train start index, stop index
             val size: val start index, stop index
             test size: test start index, stop index
+            num_failure: number of edge failures
             device: device id
+            obs_ratio: ratio of observed node pairs in sparse observation
+            hist_len: number of historical traffic matrices as model input
+            prune_demands: only keep node pairs with nonzero demand in any
+                traffic matrix (for sparse satellite traffic)
             raw_action_min: min value when clamp raw action
             raw_action_max: max value when clamp raw action
         """
@@ -57,15 +63,31 @@ class TealEnv(object):
         self.num_failure = num_failure
         self.device = device
 
+        # sparse observation: observed ratio and history window length
+        self.obs_ratio = obs_ratio
+        self.hist_len = hist_len
+
         # init matrices related to topology
         self.G = self._read_graph_json(topo)
         self.capacity = torch.FloatTensor(
             [float(c_e) for u, v, c_e in self.G.edges.data('capacity')])
         self.num_edge_node = len(self.G.edges)
-        self.num_path_node = self.num_path * self.G.number_of_nodes()\
-            * (self.G.number_of_nodes()-1)
+        # demand pairs: all node pairs, or pairs with nonzero demand
+        # in any traffic matrix when prune_demands is enabled
+        self.prune_demands = prune_demands
+        self.demand_pairs = self._get_demand_pairs(prune_demands)
+        self.num_demand = len(self.demand_pairs)
+        self.num_path_node = self.num_path * self.num_demand
+        self.demand_src = torch.LongTensor(
+            [s for s, t in self.demand_pairs])
+        self.demand_dst = torch.LongTensor(
+            [t for s, t in self.demand_pairs])
         self.edge_index, self.edge_index_values, self.p2e = \
             self.get_topo_matrix(topo, num_path, edge_disjoint, dist_metric)
+
+        # binary mask over demands: 1 = observed, 0 = unobserved
+        # fixed across train/val/test for reproducibility
+        self.obs_mask = self._init_obs_mask()
 
         # init ADMM
         self.ADMM = ADMM(
@@ -90,21 +112,60 @@ class TealEnv(object):
         self.idx = self.idx_start
         self.obs = self._read_obs()
 
-    def get_obs(self):
-        """Return observation (capacity + traffic matrix)."""
+    def _get_demand_pairs(self, prune_demands):
+        """Return list of demand pairs in source-major order.
+        When prune_demands is enabled, only keep node pairs with nonzero
+        demand in any traffic matrix of the problem list.
+        """
 
-        return self.obs
+        num_node = self.G.number_of_nodes()
+        if not prune_demands:
+            return [(s, t) for s in range(num_node) for t in range(num_node)
+                    if s != t]
+        # union of nonzero demands across all traffic matrices
+        nonzero = None
+        for _, _, tm_fname in self.problems:
+            with open(tm_fname, 'rb') as f:
+                tm = pickle.load(f)
+            nonzero = (tm > 0) if nonzero is None else nonzero | (tm > 0)
+        return [(s, t) for s in range(num_node) for t in range(num_node)
+                if s != t and nonzero[s][t]]
+
+    def _init_obs_mask(self):
+        """Return binary mask over demands from sampling with obs_ratio.
+        Mask is generated once with a fixed seed so that the same node
+        pairs are observed in training and testing.
+        """
+
+        if self.obs_ratio >= 1.0:
+            return torch.ones(self.num_demand).to(self.device)
+        generator = torch.Generator().manual_seed(0)
+        num_observed = max(1, int(round(self.num_demand * self.obs_ratio)))
+        idx_observed = torch.randperm(
+            self.num_demand, generator=generator)[:num_observed]
+        mask = torch.zeros(self.num_demand)
+        mask[idx_observed] = 1
+        return mask.to(self.device)
+
+    def get_obs(self):
+        """Return sparse observation for the model:
+        (capacity + historical sparse traffic matrices + mask).
+        Unobserved demands are NOT filled with 0 here; they are marked by
+        the mask and replaced with a learnable mask embedding in the actor.
+        Full traffic matrix in self.obs is reserved for reward and ADMM.
+        """
+
+        return {
+            'capacity': self.obs[:-self.num_path_node],
+            'tm_seq': torch.stack(self.hist_tms),
+            'mask': self.obs_mask,
+        }
 
     def _read_obs(self):
         """Return observation (capacity + traffic matrix) from files."""
 
         topo, topo_fname, tm_fname = self.problems[self.idx]
-        with open(tm_fname, 'rb') as f:
-            tm = pickle.load(f)
-        # remove demands within nodes
-        tm = torch.FloatTensor(
-            [[ele]*self.num_path for i, ele in enumerate(tm.flatten())
-                if i % len(tm) != i//len(tm)]).flatten()
+        tm = self._read_tm(tm_fname)
         obs = torch.concat([self.capacity, tm]).to(self.device)
         # simulate link failures in testing
         if self.num_failure > 0 and self.idx_start == self.test_start:
@@ -112,7 +173,39 @@ class TealEnv(object):
                 random.sample(range(self.num_edge_node),
                 self.num_failure)).to(self.device)
             obs[idx_failure] = 0
+        # sparse historical traffic matrices for the model input
+        self.hist_tms = self._read_hist_tms()
         return obs
+
+    def _read_tm(self, tm_fname):
+        """Return flattened traffic matrix on demand pairs from file."""
+
+        with open(tm_fname, 'rb') as f:
+            tm = pickle.load(f)
+        # select demand pairs and repeat for each path
+        tm = torch.FloatTensor(tm)[self.demand_src, self.demand_dst]
+        return tm.repeat_interleave(self.num_path)
+
+    def _read_hist_tms(self):
+        """Return sparse historical traffic matrices ending at current idx.
+        Traffic matrices are indexed in time order; take hist_len steps
+        backwards within the current slice and mask unobserved demands.
+        Masked entries are zeroed only as placeholders: the actor should
+        replace them with a learnable mask embedding based on the mask.
+        """
+
+        hist_tms = []
+        # demand-level mask expanded to path level
+        path_mask = self.obs_mask.repeat_interleave(self.num_path)
+        for step_back in range(self.hist_len - 1, -1, -1):
+            idx = self.idx - step_back
+            # pad with the earliest tm in the slice at the beginning
+            if idx < self.idx_start:
+                idx = self.idx_start
+            _, _, tm_fname = self.problems[idx]
+            tm = self._read_tm(tm_fname).to(self.device)
+            hist_tms.append(tm * path_mask)
+        return hist_tms
 
     def _next_obs(self):
         """Return next observation (capacity + traffic matrix)."""
@@ -360,10 +453,13 @@ class TealEnv(object):
     def path_full_fname(self, topo, num_path, edge_disjoint, dist_metric):
         """Return full name of the topology path."""
 
+        # pruned path dict only contains demand pairs with nonzero demand
+        pruned_str = "_pruned-{}".format(self.num_demand) \
+            if self.prune_demands else ""
         return os.path.join(
             TOPOLOGIES_DIR, "paths", "path-form",
-            "{}-{}-paths_edge-disjoint-{}_dist-metric-{}-dict.pkl".format(
-                topo, num_path, edge_disjoint, dist_metric))
+            "{}-{}-paths_edge-disjoint-{}_dist-metric-{}{}-dict.pkl".format(
+                topo, num_path, edge_disjoint, dist_metric, pruned_str))
 
     def get_path(self, topo, num_path, edge_disjoint, dist_metric):
         """Return path dictionary."""
@@ -390,13 +486,10 @@ class TealEnv(object):
 
         path_dict = {}
         G = graph_copy_with_edge_weights(self.G, dist_metric)
-        for s_k in G.nodes:
-            for t_k in G.nodes:
-                if s_k == t_k:
-                    continue
-                paths = find_paths(G, s_k, t_k, num_path, edge_disjoint)
-                paths_no_cycles = [remove_cycles(path) for path in paths]
-                path_dict[(s_k, t_k)] = paths_no_cycles
+        for s_k, t_k in self.demand_pairs:
+            paths = find_paths(G, s_k, t_k, num_path, edge_disjoint)
+            paths_no_cycles = [remove_cycles(path) for path in paths]
+            path_dict[(s_k, t_k)] = paths_no_cycles
         return path_dict
 
     def get_regular_path(self, topo, num_path, edge_disjoint, dist_metric):
@@ -434,22 +527,19 @@ class TealEnv(object):
 
         # build edge_index
         src, dst, path_i = [], [], 0
-        for s in range(len(self.G)):
-            for t in range(len(self.G)):
-                if s == t:
-                    continue
-                for path in path_dict[(s, t)]:
-                    for (u, v) in zip(path[:-1], path[1:]):
-                        src.append(edge_num+path_i)
-                        dst.append(edge2idx_dict[(u, v)])
+        for s, t in self.demand_pairs:
+            for path in path_dict[(s, t)]:
+                for (u, v) in zip(path[:-1], path[1:]):
+                    src.append(edge_num+path_i)
+                    dst.append(edge2idx_dict[(u, v)])
 
-                        if src[-1] not in node2degree_dict:
-                            node2degree_dict[src[-1]] = 0
-                        node2degree_dict[src[-1]] += 1
-                        if dst[-1] not in node2degree_dict:
-                            node2degree_dict[dst[-1]] = 0
-                        node2degree_dict[dst[-1]] += 1
-                    path_i += 1
+                    if src[-1] not in node2degree_dict:
+                        node2degree_dict[src[-1]] = 0
+                    node2degree_dict[src[-1]] += 1
+                    if dst[-1] not in node2degree_dict:
+                        node2degree_dict[dst[-1]] = 0
+                    node2degree_dict[dst[-1]] += 1
+                path_i += 1
 
         # edge_index is D^(-0.5)*(adj)*D^(-0.5) without self-loop
         edge_index_values = torch.tensor(

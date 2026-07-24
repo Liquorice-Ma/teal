@@ -37,6 +37,10 @@ class FlowGNN(nn.Module):
         self.num_path = self.env.num_path
         self.num_path_node = self.env.num_path_node
         self.num_edge_node = self.env.num_edge_node
+        # sparse gating: block path->edge messages from unobserved paths
+        # so that mask embeddings do not pollute edge-node features, while
+        # edge->path messages are kept for unobserved paths to sense links
+        self.gated_index_values = self._gate_index_values()
         # self.adj_adj = torch.sparse_coo_tensor(self.edge_index,
         #    self.edge_index_values,
         #    [self.num_path_node + self.num_edge_node,
@@ -56,6 +60,22 @@ class FlowGNN(nn.Module):
         # weight initialization for dnn and gnn
         self.apply(weight_initialization)
 
+    def _gate_index_values(self):
+        """Return edge_index_values with unobserved path->edge entries zeroed.
+        edge_index is [src+dst, dst+src] where src are path nodes (with
+        edge-node offset) and dst are edge nodes. In spmm the row receives
+        messages, so the second half (row=edge, col=path) carries path->edge
+        messages and is gated by the observation mask at demand level.
+        """
+
+        # demand-level mask expanded to path level
+        path_mask = self.env.obs_mask.repeat_interleave(self.num_path)
+        num_pe = self.edge_index.shape[1] // 2
+        gate = torch.ones_like(self.edge_index_values)
+        gate[num_pe:] = path_mask[
+            self.edge_index[1, num_pe:] - self.num_edge_node]
+        return self.edge_index_values * gate
+
     def forward(self, h_0):
         """Return embeddings after forward propagation
 
@@ -72,7 +92,7 @@ class FlowGNN(nn.Module):
             h_i = self.gnn_list[i](h_i)
             # h_i = torch.sparse.mm(self.adj_adj, h_i)
             h_i = torch_sparse.spmm(
-                self.edge_index, self.edge_index_values,
+                self.edge_index, self.gated_index_values,
                 h_0.shape[0], h_0.shape[0], h_i)
 
             # dnn
