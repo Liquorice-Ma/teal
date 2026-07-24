@@ -25,7 +25,7 @@ class TealEnv(object):
             self, obj, topo, problems,
             num_path, edge_disjoint, dist_metric, rho,
             train_size, val_size, test_size, num_failure, device,
-            obs_ratio=1.0, hist_len=1, prune_demands=False,
+            obs_ratio=1.0, obs_type='flow', hist_len=1, prune_demands=False,
             raw_action_min=-10.0, raw_action_max=10.0):
         """Initialize Teal environment.
 
@@ -43,6 +43,8 @@ class TealEnv(object):
             num_failure: number of edge failures
             device: device id
             obs_ratio: ratio of observed node pairs in sparse observation
+            obs_type: sampling granularity, 'flow' samples demand pairs,
+                'node' samples source nodes with all outgoing demands observed
             hist_len: number of historical traffic matrices as model input
             prune_demands: only keep node pairs with nonzero demand in any
                 traffic matrix (for sparse satellite traffic)
@@ -65,6 +67,7 @@ class TealEnv(object):
 
         # sparse observation: observed ratio and history window length
         self.obs_ratio = obs_ratio
+        self.obs_type = obs_type
         self.hist_len = hist_len
 
         # init matrices related to topology
@@ -135,16 +138,29 @@ class TealEnv(object):
         """Return binary mask over demands from sampling with obs_ratio.
         Mask is generated once with a fixed seed so that the same node
         pairs are observed in training and testing.
+        flow-level: sample demand pairs directly;
+        node-level: sample source nodes that meter all outgoing demands.
         """
 
         if self.obs_ratio >= 1.0:
             return torch.ones(self.num_demand).to(self.device)
         generator = torch.Generator().manual_seed(0)
-        num_observed = max(1, int(round(self.num_demand * self.obs_ratio)))
-        idx_observed = torch.randperm(
-            self.num_demand, generator=generator)[:num_observed]
-        mask = torch.zeros(self.num_demand)
-        mask[idx_observed] = 1
+        if self.obs_type == 'node':
+            num_node = self.G.number_of_nodes()
+            num_observed = max(1, int(round(num_node * self.obs_ratio)))
+            idx_observed = torch.randperm(
+                num_node, generator=generator)[:num_observed]
+            node_observed = torch.zeros(num_node, dtype=torch.bool)
+            node_observed[idx_observed] = True
+            mask = torch.FloatTensor(
+                [1. if node_observed[s] else 0.
+                    for s, t in self.demand_pairs])
+        else:
+            num_observed = max(1, int(round(self.num_demand * self.obs_ratio)))
+            idx_observed = torch.randperm(
+                self.num_demand, generator=generator)[:num_observed]
+            mask = torch.zeros(self.num_demand)
+            mask[idx_observed] = 1
         return mask.to(self.device)
 
     def get_obs(self):

@@ -97,9 +97,9 @@ class TealActor(nn.Module):
 
         return os.path.join(
             model_dir,
-            "{}_flowGNN-{}_std-{}_obs-{}_hist-{}_mask-{}_gate-{}.pt".format(
+            "{}_flowGNN-{}_std-{}_obs-{}-{}_hist-{}_mask-{}_gate-{}.pt".format(
                 topo, num_layer, std < 0,
-                self.env.obs_ratio, self.env.hist_len,
+                self.env.obs_type, self.env.obs_ratio, self.env.hist_len,
                 self.mask_mode, self.FlowGNN.gate))
 
     def load_model(self):

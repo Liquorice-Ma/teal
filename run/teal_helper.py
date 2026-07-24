@@ -142,6 +142,11 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         '--obs-ratio', type=float, default=1.0,
         help='ratio of observed node pairs in sparse traffic matrices')
     parser.add_argument(
+        '--obs-type', type=str, default='flow', choices=['flow', 'node'],
+        help='sparse sampling granularity: flow-level samples demand '
+             'pairs; node-level samples source nodes whose outgoing '
+             'demands are all observed')
+    parser.add_argument(
         '--hist-len', type=int, default=1,
         help='number of historical traffic matrices as model input')
     parser.add_argument(

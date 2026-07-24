@@ -59,6 +59,7 @@ def benchmark(problems, output_csv, arg):
     test_size = [args.slice_test_start, args.slice_test_stop]
     # sparse observation hyper-parameters
     obs_ratio = args.obs_ratio
+    obs_type = args.obs_type
     hist_len = args.hist_len
     prune_demands = args.prune_demands
     mask_mode = args.mask_mode
@@ -91,6 +92,7 @@ def benchmark(problems, output_csv, arg):
         num_failure=num_failure,
         device=device,
         obs_ratio=obs_ratio,
+        obs_type=obs_type,
         hist_len=hist_len,
         prune_demands=prune_demands)
     teal_actor = TealActor(
