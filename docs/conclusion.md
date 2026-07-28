@@ -9,9 +9,9 @@
 
 **English draft:**
 
-This paper presented [SYSTEM-NAME], the first learning-based traffic
+This paper presented SiTE, the first learning-based traffic
 engineering system for LEO satellite constellations that operates directly on
-sparse traffic observations. [SYSTEM-NAME] resolves the ambiguity of
+sparse traffic observations. SiTE resolves the ambiguity of
 unmeasured demands with learnable mask embeddings, protects network-state
 estimates with mask-aware gated message passing, and recovers missing
 information from observation history through temporal-spatial cross-attention
@@ -19,7 +19,7 @@ information from observation history through temporal-spatial cross-attention
 completion stage. Demand pruning and size-invariant weights let a model
 trained once serve drifting topologies and demand sets with zero retraining.
 On a 22×72 Starlink-like constellation with real traffic dynamics,
-[SYSTEM-NAME] achieves [XX]% of fully-observed performance with only [XX]%
+SiTE achieves [XX]% of fully-observed performance with only [XX]%
 observability, outperforming zero-filling and two-stage baselines by
 [XX–XX]%, at [XX] ms inference per snapshot.
 

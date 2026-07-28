@@ -107,8 +107,8 @@ memory and latency budget of any online system.
 
 **English draft:**
 
-We present [SYSTEM-NAME], a learning-based TE system for LEO constellations that
-allocates traffic directly from sparse observations. [SYSTEM-NAME] builds on the
+We present SiTE, a learning-based TE system for LEO constellations that
+allocates traffic directly from sparse observations. SiTE builds on the
 flow-centric GNN + multi-agent RL backbone of Teal and augments it with three
 sparse-aware components. First, unobserved demands are represented by *learnable
 mask embeddings* rather than zeros, letting the model learn a prior for missing
@@ -118,7 +118,7 @@ utilization estimates — while still letting unobserved demands sense link stat
 in the reverse direction (C1). Third, a *Transformer temporal encoder* summarizes
 the recent history of sparse observations and fuses it with spatial embeddings
 via per-demand cross-attention, recovering missing information from temporal
-correlation (C1). For deployment at scale, [SYSTEM-NAME] prunes the demand set to
+correlation (C1). For deployment at scale, SiTE prunes the demand set to
 pairs with observed traffic — 250× fewer variables on a 22×72 Starlink-like
 constellation — and keeps all model weights independent of the demand-set size,
 so a model trained once transfers across topology snapshots and drifting demand
@@ -126,7 +126,7 @@ sets without retraining (C2, C3). Allocations are finally refined by a
 parallelizable ADMM step to repair residual capacity violations.
 
 **中文批注：**
-- [SYSTEM-NAME] 待起名。建议起一个卫星/稀疏相关的短名（如 SparTE、MaskTE、
+- SiTE 待起名。建议起一个卫星/稀疏相关的短名（如 SparTE、MaskTE、
   StarSparse 之类），定名后全局替换。
 - 每个模块句尾标注回应的挑战编号，与 P4 严格对齐。
 - "250× fewer"来自 250万→6334 对 ≈ 396×，保守写 250×，正式数字等实验定稿。
@@ -141,14 +141,14 @@ In summary, this paper makes the following contributions:
 - We identify sparse traffic observability as a fundamental yet unaddressed
   constraint for satellite TE, and formulate TE from sparse observations over
   dynamic constellations (§2, §3).
-- We design [SYSTEM-NAME], which combines learnable mask embeddings, mask-aware
+- We design SiTE, which combines learnable mask embeddings, mask-aware
   gated message passing, and temporal-spatial cross-attention to allocate traffic
   directly from sparse inputs, without an explicit completion stage (§4).
 - We show how demand pruning and size-invariant weights enable train-once,
   zero-retraining deployment across topology snapshots and drifting demand sets
   (§4, §5).
 - On a 22×72 Starlink-like constellation with real topology dynamics,
-  [SYSTEM-NAME] achieves [XX]% of the fully-observed performance with only
+  SiTE achieves [XX]% of the fully-observed performance with only
   [XX]% observability, outperforming zero-filling and two-stage baselines by
   [XX–XX]%, with [XX] ms inference per snapshot (§6).
 

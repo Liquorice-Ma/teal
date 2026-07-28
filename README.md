@@ -1,4 +1,4 @@
-# Sparse-Observation Traffic Engineering for LEO Satellite Networks
+# A Glimpse Is Enough: SiTE — Sparse-Input Traffic Engineering for LEO Satellite Constellations
 
 Learning-based traffic engineering (TE) for large-scale LEO satellite
 constellations that operates directly on **sparse traffic observations**:
