@@ -1,9 +1,33 @@
 \section{Conclusion}
 \label{sec:conclusion}
 
-% 迁移来源：docs/conclusion.md（7.1 结论段 + 7.2 局限并入或删减）
+% 迁移自 docs/conclusion.md
 
-% [TODO] 迁移 7.1：贡献过去时复述 + 最硬数字（待回填）
+This paper presented \sysname{}, the first learning-based traffic
+engineering system for LEO satellite constellations that operates directly
+on sparse traffic observations. \sysname{} resolves the ambiguity of
+unmeasured demands with learnable mask embeddings, protects network-state
+estimates with mask-aware gated message passing, and recovers missing
+information from observation history through temporal-spatial
+cross-attention --- all trained end-to-end against the TE objective without
+an explicit completion stage. Demand pruning and size-invariant weights let
+a model trained once serve drifting topologies and demand sets with zero
+retraining. On a $22 \times 72$ Starlink-like constellation with real
+traffic dynamics, \sysname{} achieves \todo{XX}\% of fully-observed
+performance with only \todo{XX}\% observability, outperforming zero-filling
+and two-stage baselines by \todo{XX--XX}\%, at \todo{XX}~ms inference per
+snapshot.
 
-% [TODO] 可选：7.2 局限与未来工作（时变掩码/测量调度、嫁接 IL、
-% 路径模板 $O(1)$ 查表、实测流量验证）
+Three directions remain open. First, our observation masks are static
+within a trace; real measurement availability fluctuates with
+ground-contact windows and onboard load, motivating time-varying masks and
+measurement scheduling --- deciding \emph{which} demands to measure next
+--- as a joint control problem. Second, our input-side modules are
+orthogonal to the training paradigm: combining them with imitation
+learning~\cite{fnc} where post-hoc complete traces are available, or with
+hybrid schemes, may improve sample efficiency. Third, the path templates of
++Grid constellations suggest an $O(1)$ displacement-indexed path lookup
+that we currently approximate with per-set path caching; a full
+implementation would further cut graph-rebuild latency. We also plan to
+validate on measured (rather than synthesized) satellite traffic as such
+datasets become available.
