@@ -18,7 +18,31 @@ history and fuses it with spatial embeddings via per-demand cross-attention
 demand, refined by ADMM (\cref{sec:training}). All learnable weights are
 shared across demands and independent of the demand-set size, which
 \cref{sec:scaling} exploits for zero-retraining deployment under
-constellation dynamics.
+constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
+
+\begin{algorithm}[t]
+\caption{\sysname{} inference at control epoch $t$}
+\label{alg:infer}
+\begin{algorithmic}[1]
+\Require sparse history $H^t$, mask $M$, topology $G^t$, weights $\theta^\star$
+\Ensure split ratios $\{r_i\}_{i\in\mathcal{K}^t}$
+\State $\mathcal{K}^t \gets$ active demand set from recent history
+    \Comment{pruning, \cref{sec:scaling}}
+\State rebuild bipartite graph and gated adjacency $\tilde{A}$ from
+    $\mathcal{K}^t, M$ \Comment{\cref{eq:gate}}
+\State $x_i \gets M_i d_i + (1-M_i)\theta$ for all $i$
+    \Comment{mask embedding, \cref{eq:mask-embed}}
+\State $H_S \gets \textsc{GatedFlowGNN}(x, \tilde{A})$
+    \Comment{spatial embeddings}
+\State $H_T \gets \textsc{TemporalEncoder}(H^t)$
+    \Comment{temporal embeddings}
+\State $H_F \gets \textsc{CrossAttention}(H_T, H_S)$ \Comment{\cref{eq:fusion}}
+\State $\{r_i\} \gets \textsc{PolicyHead}([H_S \,\|\, H_F])$
+\State $\{r_i\} \gets \textsc{ADMMRepair}(\{r_i\}, G^t)$
+    \Comment{\cref{sec:training}}
+\State \Return $\{r_i\}$
+\end{algorithmic}
+\end{algorithm}
 
 \begin{figure}[t]
     \centering
@@ -151,3 +175,24 @@ that is unavailable when even post-hoc observation is sparse; RL needs only
 the reward, which the network itself provides. At inference, allocations are
 refined by two parallelizable ADMM iterations to repair residual violations
 of the capacity constraint~\eqref{eq:capacity}, adding less than 1~ms.
+
+\subsection{Complexity Analysis}
+\label{sec:complexity}
+
+Let $D = |\mathcal{K}^t|$ be the number of active demands, $\kappa$ the
+candidate paths per demand, $E$ the number of ISLs, and $\bar{\ell}$ the
+average path length. The gated FlowGNN performs message passing over the
+bipartite graph whose edge count is $O(D\kappa\bar{\ell})$; with $\Lambda$
+layers its cost is $O(\Lambda D \kappa \bar{\ell} d)$ for hidden width $d$.
+The temporal encoder applies a Transformer of length $L$ independently to
+each of the $D\kappa$ path tokens, costing $O(D\kappa L^2 d)$, and the
+per-demand cross-attention over $\kappa$ paths adds $O(D\kappa^2 d)$. Since
+$\kappa$, $L$, $\bar{\ell}$, and $d$ are small constants fixed by design, the
+end-to-end inference cost is \emph{linear} in the number of active demands,
+$O(D)$, and all operations are batched across demands on the GPU.
+Crucially, the parameter count is independent of $D$, $N$, and $E$: the same
+weights apply to any demand set, which is what enables zero-retraining reuse
+(\cref{sec:scaling}). Demand pruning reduces $D$ from $N(N-1)$ to the
+observed support --- roughly $400\times$ on our constellation --- turning an
+otherwise intractable problem into one solved in milliseconds
+(\cref{sec:runtime}).
