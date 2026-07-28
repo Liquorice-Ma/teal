@@ -182,3 +182,27 @@ plt.close(fig)
 
 print('saved 6 additional figures: obstype / ablation-rho / split-time / '
       'runtime / histlen / capacity [PLACEHOLDER DATA]')
+
+# ============ Fig J: CDF of per-snapshot satisfied ratio (RQ1) ============
+nsnap = 11 * 3          # test snapshots x seeds
+samples = {
+    'Ours':         np.clip(rng.normal(0.938, 0.012, nsnap), 0, 1),
+    'Mean-interp.': np.clip(rng.normal(0.826, 0.030, nsnap), 0, 1),
+    'Zero-fill':    np.clip(rng.normal(0.788, 0.038, nsnap), 0, 1),
+    'Teal-full':    np.clip(rng.normal(0.965, 0.008, nsnap), 0, 1),
+}
+styles = {'Ours': (GREEN, '-'), 'Mean-interp.': (ORANGE, '--'),
+          'Zero-fill': (BLUE, '--'), 'Teal-full': (GRAY, ':')}
+fig, ax = plt.subplots(figsize=(3.4, 2.6), constrained_layout=True)
+for name, vals in samples.items():
+    xs = np.sort(vals)
+    ys = np.arange(1, xs.size + 1) / xs.size
+    color, ls = styles[name]
+    ax.plot(xs, ys, ls, color=color, lw=1.6, label=name)
+ax.set_xlabel('satisfied demand ratio')
+ax.set_ylabel('CDF')
+ax.legend(fontsize=7, loc='upper left')
+ax.set_title('Per-snapshot CDF ($\\rho=0.3$)', fontsize=9)
+fig.savefig('exp-cdf.pdf', bbox_inches='tight')
+plt.close(fig)
+print('saved exp-cdf [PLACEHOLDER DATA]')

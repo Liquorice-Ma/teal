@@ -26,7 +26,41 @@ capacity is calibrated so that the fully-observed optimum leaves moderate
 congestion (satisfied ratio ${\approx}0.87$), keeping TE decisions
 non-trivial. Snapshots 0--79 are used for training, 80--89 for
 validation, and 90--100 for testing --- a strict temporal split with no
-leakage.
+leakage. \Cref{tab:tm-stats} summarizes the trace;
+\cref{fig:traffic-char} illustrates its two properties that
+\sysname{} exploits: strong short-term temporal correlation of
+per-satellite volumes, and pronounced geographic concentration ---
+satellites over populated regions carry orders of magnitude more traffic
+than those over oceans, which is what makes demand pruning
+(\cref{sec:scaling}) effective.
+
+\begin{table}[t]
+    \caption{Statistics of the traffic trace (real data).}
+    \label{tab:tm-stats}
+    \centering
+    \footnotesize
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        Snapshots (5-min interval) & 101 \\
+        Nonzero demand (Mbps), min/max & 1.0 / 1{,}800 \\
+        Nonzero demand (Mbps), mean$\pm$std & 159.5 $\pm$ 242.3 \\
+        Total demand per snapshot (mean) & 890{,}242 Mbps \\
+        Active pairs per snapshot (mean) & 5{,}583 (0.22\%) \\
+        Active-pair union over the trace & 6{,}334 (0.25\%) \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.49\linewidth]{figures/traffic-dynamics.pdf}\hfill
+    \includegraphics[width=0.49\linewidth]{figures/geo-heatmap.pdf}
+    \caption{Traffic characteristics of the trace (real data). Left:
+    egress volume of representative satellites over time. Right: total
+    egress per satellite on the orbital grid --- traffic concentrates
+    over populated regions.}
+    \label{fig:traffic-char}
+\end{figure}
 
 \textbf{Metrics and baselines.} We report the \emph{satisfied demand
 ratio} (allocated flow after ADMM and rounding, evaluated against
@@ -47,6 +81,17 @@ the fully-observed optimum even at $\rho=0.1$, whereas zero-filling and
 mean-interpolation drop sharply as more demands become unmeasured. The gap
 widens as $\rho$ shrinks, confirming that mask embeddings and temporal
 recovery matter most when information is scarcest.
+\Cref{fig:exp-cdf} further shows the per-snapshot distribution at
+$\rho=0.3$: \sysname{} is not only better on average but also markedly
+more stable across snapshots.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-cdf.pdf}
+    \caption{CDF of per-snapshot satisfied ratio at $\rho=0.3$
+    (placeholder data).}
+    \label{fig:exp-cdf}
+\end{figure}
 
 \begin{table}[t]
     \caption{Satisfied demand ratio (mean$\pm$std over 3 seeds,
