@@ -111,14 +111,20 @@ allocations of unmeasured demands.
 \end{proposition}
 
 \begin{IEEEproof}
-By induction on GNN layers. At layer $0$, only unmeasured PathNodes carry
-$\phi$. At layer $l$, an EdgeNode aggregates path-to-edge messages with
-weights $\tilde{A}[e,p] = M_p A[e,p]$, which vanish for every unmeasured
-path; hence EdgeNode embeddings depend only on measured-path inputs and
-their own history, none of which contains $\phi$. A measured PathNode
-aggregates EdgeNode embeddings ($\phi$-free by the above) and its own
-$\phi$-free input; the per-demand layers mix only paths of the same demand,
-which share the same mask value. Thus $\phi$ never enters any
+Consider first the spatial stream, by induction on GNN layers. At layer
+$0$, only unmeasured PathNodes carry $\phi$. At layer $l$, an EdgeNode
+aggregates path-to-edge messages with weights
+$\tilde{A}[e,p] = M_p A[e,p]$, which vanish for every unmeasured path;
+hence EdgeNode embeddings depend only on measured-path inputs and their
+own history, none of which contains $\phi$. A measured PathNode aggregates
+EdgeNode embeddings ($\phi$-free by the above) and its own $\phi$-free
+input; the per-demand layers mix only paths of the same demand, which
+share the same mask value. The temporal and fusion streams preserve the
+property: the temporal encoder acts per path on the raw observation
+history $H^t$, which contains no $\phi$ by construction, and the
+cross-attention of~\eqref{eq:fusion} operates strictly within each demand,
+so the fused features of a measured demand combine only its own
+$\phi$-free temporal and spatial embeddings. Thus $\phi$ never enters any
 $\phi$-free branch, and only unmeasured PathNodes --- and consequently
 their own split ratios --- depend on $\phi$.
 \end{IEEEproof}
@@ -271,7 +277,9 @@ end-to-end inference cost is \emph{linear} in the number of active demands,
 $O(D)$, and all operations are batched across demands on the GPU.
 Crucially, the parameter count is independent of $D$, $N$, and $E$: the same
 weights apply to any demand set, which is what enables zero-retraining reuse
-(\cref{sec:scaling}). Demand pruning reduces $D$ from $N(N-1)$ to the
-observed support --- roughly $400\times$ on our constellation --- turning an
-otherwise intractable problem into one solved in milliseconds
-(\cref{sec:runtime}).
+(\cref{sec:scaling}). In our configuration the entire model has merely
+4{,}468 trainable parameters --- small enough to be replicated on
+resource-constrained satellite platforms. Demand pruning reduces $D$ from
+$N(N-1)$ to the observed support --- roughly $400\times$ on our
+constellation --- turning an otherwise intractable problem into one solved
+in milliseconds (\cref{sec:runtime}).

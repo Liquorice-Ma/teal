@@ -183,6 +183,15 @@ as the index tensors alone would exceed \todo{XX}~GB.
     \label{fig:exp-runtime}
 \end{figure}
 
+\textbf{Control-loop budget.} Inference is only part of the control loop:
+collecting sparse measurements and disseminating split ratios traverse
+ground--satellite and inter-satellite links, adding propagation delays on
+the order of a few tens of milliseconds in LEO. Millisecond-scale
+inference keeps the end-to-end loop dominated by propagation rather than
+computation; moreover, since the trained model has fewer than 5{,}000
+parameters (\cref{sec:complexity}), it can also be replicated onboard to
+shorten the dissemination path.
+
 \subsection{Sensitivity Analysis}
 \label{sec:sensitivity}
 
