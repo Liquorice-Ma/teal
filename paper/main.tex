@@ -1,4 +1,5 @@
-\documentclass[journal]{IEEEtran}
+\documentclass[10pt,journal,compsoc]{IEEEtran}
+% TNSE 官方模板走 Computer Society 模式（bare_jrnl_compsoc.tex，IEEEtran V1.8b）
 
 % ==== packages ====
 \usepackage[T1]{fontenc}
@@ -29,30 +30,36 @@
 % TODO: 标题定稿；候选：加 "Learning-Based" / 突出 "Mask-Aware"
 
 \author{%
-    Author~One,
+    Author~One,~\IEEEmembership{Member,~IEEE,}
     Author~Two,
-    and~Author~Three% TODO: 作者与单位、IEEEmembership
+    and~Author~Three% TODO: 作者与 IEEEmembership
+    \IEEEcompsocitemizethanks{%
+        \IEEEcompsocthanksitem A. One is with XXX University
+        (e-mail: xxx@xxx.edu).% TODO: 单位与邮箱
+    }%
     \thanks{Manuscript received XXX; revised XXX.}%
-    \thanks{A. One is with XXX University (e-mail: xxx@xxx.edu).}%
 }
 
 \markboth{IEEE Transactions on Network Science and Engineering}%
 {One \MakeLowercase{\textit{et al.}}: TE for LEO Satellite Networks with Sparse Traffic Observations}
 
-\maketitle
-
+% compsoc 模式：摘要与关键词包进 title-abstract-index 块
+\IEEEtitleabstractindextext{%
 \begin{abstract}
 % TODO: 摘要最后写（intro 定稿后压缩为 150-250 词）
 % 骨架：背景一句 / gap 一句（现有卫星 TE 假设完整流量矩阵）/ 方案两句
 % （掩码嵌入+门控 GNN+时序融合；剪枝+零重训部署）/ 结果一句（[XX] 数字）
-\todo{abstract after experiments}
+The abstract will be finalized after experiments.
 \end{abstract}
 
 \begin{IEEEkeywords}
 Satellite networks, traffic engineering, sparse measurement, graph neural
 networks, reinforcement learning.
-\end{IEEEkeywords}
+\end{IEEEkeywords}}
 
+\maketitle
+
+\IEEEdisplaynontitleabstractindextext
 \IEEEpeerreviewmaketitle
 
 \input{sections/01-introduction}
