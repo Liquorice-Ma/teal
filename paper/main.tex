@@ -46,10 +46,29 @@
 % compsoc 模式：摘要与关键词包进 title-abstract-index 块
 \IEEEtitleabstractindextext{%
 \begin{abstract}
-% TODO: 摘要最后写（intro 定稿后压缩为 150-250 词）
-% 骨架：背景一句 / gap 一句（现有卫星 TE 假设完整流量矩阵）/ 方案两句
-% （掩码嵌入+门控 GNN+时序融合；剪枝+零重训部署）/ 结果一句（[XX] 数字）
-The abstract will be finalized after experiments.
+Traffic engineering (TE) is a key control primitive for low-Earth-orbit
+(LEO) satellite constellations, whose topologies and traffic change
+continuously as satellites move. Existing learning-based TE systems ---
+for terrestrial and satellite networks alike --- assume that the complete
+traffic matrix is measured and delivered to the controller at every
+decision epoch. This assumption rarely holds in practice: network-wide
+measurement competes with user traffic for scarce onboard resources, and
+the controller typically observes only a sparse subset of demands. We
+present \sysname{}, a learning-based TE system that allocates traffic for
+\emph{all} active demands directly from sparse observations. \sysname{}
+represents unmeasured demands with learnable mask embeddings instead of
+zeros, gates message passing so that placeholders never contaminate
+link-state estimates, and recovers missing information from the recent
+observation history through a Transformer fused with spatial embeddings
+via per-demand cross-attention --- all trained end-to-end against the TE
+objective without an explicit completion stage. Demand pruning and
+size-invariant weights further allow a model trained once to be reused as
+the topology and the active demand set drift, without retraining. On a
+$22 \times 72$ Starlink-like constellation with real traffic dynamics,
+\sysname{} achieves \todo{XX}\% of the fully-observed performance with
+only \todo{XX}\% observability, outperforming zero-filling and two-stage
+complete-then-optimize baselines by up to \todo{XX}\%, at \todo{XX}~ms
+inference per snapshot.
 \end{abstract}
 
 \begin{IEEEkeywords}
