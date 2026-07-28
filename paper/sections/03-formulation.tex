@@ -1,22 +1,127 @@
 \section{Model and Problem Formulation}
 \label{sec:formulation}
 
-% 迁移来源：docs/formulation.md（注意符号冲突修正：候选路径数用 $\kappa$，
-% active demand 集合用 $\mathcal{K}^t$）
+% 迁移自 docs/formulation.md；符号修正已应用：候选路径数 kappa，demand 集合 \mathcal{K}^t
 
 \subsection{Network and Traffic Model}
-% [TODO] 迁移 3.1：图/容量/时隙；demand 矩阵 $D^t$；active set $\mathcal{K}^t$；
-% 候选路径 $\kappa=4$；split ratio 参数化（$\sum_k r_{i,k} \le 1$，残差=主动
-% 不服务）
+\label{sec:model}
+
+We model the constellation at control epoch $t$ as a directed graph
+$G^t = (V, E^t)$, where $V$ is the set of $N$ satellites and $E^t$ the set of
+inter-satellite links (ISLs), each link $e$ with capacity $c_e$. Time is
+slotted into control epochs; within an epoch the topology snapshot is fixed,
+while across epochs both $E^t$ and the traffic change as satellites move.
+
+Traffic is described by a demand matrix $D^t \in \mathbb{R}^{N \times N}$,
+where $d_i$ denotes the volume of the $i$-th source--destination pair. Since
+satellite traffic is geographically concentrated, we maintain an \emph{active
+demand set} $\mathcal{K}^t$ --- the pairs with nonzero demand in recent
+history (\cref{sec:design}) --- and only these are modeled. Each demand
+$i \in \mathcal{K}^t$ is served by $\kappa$ pre-selected candidate paths
+$P_i = \{p_{i,1}, \ldots, p_{i,\kappa}\}$ ($\kappa = 4$ edge-disjoint
+shortest paths in our implementation). The TE decision for demand $i$ is a
+split-ratio vector $r_i \in \mathbb{R}^{\kappa}$ with $r_{i,k} \ge 0$ and
+$\sum_k r_{i,k} \le 1$, allocating flow $f_{i,k} = r_{i,k} \cdot d_i$ to path
+$p_{i,k}$; the residual $1 - \sum_k r_{i,k}$ represents intentionally
+unserved traffic.
 
 \subsection{TE with Complete Observation}
-% [TODO] 迁移 3.2：LP (1)--(4)；收尾钩子：LP 结构上依赖完整 $D$
-% \begin{align} ... \end{align} 公式 (1)-(4)
+\label{sec:complete-te}
+
+With the complete demand matrix available, TE is the classic path-based
+allocation problem. Using the total satisfied demand as the objective
+(total-flow TE~\cite{teal,ncflow}):
+\begin{align}
+    \max_{\{f_{i,k}\}} \quad
+        & \sum_{i \in \mathcal{K}^t} \sum_{k=1}^{\kappa} f_{i,k}
+        \label{eq:obj} \\
+    \text{s.t.} \quad
+        & \sum_{k=1}^{\kappa} f_{i,k} \le d_i,
+        && \forall i \in \mathcal{K}^t, \label{eq:demand} \\
+        & \sum_{(i,k):\, e \in p_{i,k}} f_{i,k} \le c_e,
+        && \forall e \in E^t, \label{eq:capacity} \\
+        & f_{i,k} \ge 0,
+        && \forall i, k. \label{eq:nonneg}
+\end{align}
+Constraint~\eqref{eq:demand} caps allocation at the actual demand, and
+\eqref{eq:capacity} enforces link capacities.
+Problem~\eqref{eq:obj}--\eqref{eq:nonneg} is a linear program solvable to
+optimality, but at constellation scale its solve time far exceeds the control
+epoch~\cite{sate}, and --- more fundamentally for this paper --- both the
+objective through $f_{i,k} = r_{i,k} \cdot d_i$ and
+constraint~\eqref{eq:demand} require knowing $d_i$ for \emph{every} active
+demand.
 
 \subsection{TE with Sparse Observation}
-% [TODO] 迁移 3.3：观测模型 $O^t = D^t \odot M$ (5)；flow/node 两种粒度；
-% 问题定义 (6)(7)；核心句——决策与评估位于不同信息集
+\label{sec:sparse-te}
+
+\subsubsection{Observation Model}
+At each epoch only a subset of demands is measured. A binary mask
+$M \in \{0,1\}^{|\mathcal{K}^t|}$ marks demand $i$ as measured ($M_i = 1$) or
+not ($M_i = 0$), and the controller receives the sparse observation
+\begin{equation}
+    O^t = D^t \odot M, \quad \text{together with } M \text{ itself},
+    \label{eq:obs}
+\end{equation}
+where $\odot$ is the element-wise product. We consider two measurement
+granularities: \emph{flow-level}, where a fraction $\rho$ of demand pairs is
+sampled, and \emph{node-level}, where a fraction $\rho$ of satellites meter
+all their outgoing demands --- the latter matching deployments where
+measurement capability resides on a subset of satellites. The controller
+additionally retains the last $L$ sparse observations
+$H^t = (O^{t-L+1}, \ldots, O^t)$.
+
+\subsubsection{Problem Statement}
+Sparse-observation TE seeks a policy $\pi$ that maps the observable state to
+split ratios for \emph{all} active demands,
+\begin{equation}
+    \{r_i\}_{i \in \mathcal{K}^t} = \pi\left(H^t, M, G^t\right),
+    \label{eq:policy}
+\end{equation}
+maximizing the \emph{ground-truth} objective: allocated flow is counted
+against the true demand $d_i$ and the capacity
+constraints~\eqref{eq:capacity}, even though $d_i$ is unknown to $\pi$ for
+unmeasured $i$. Formally,
+\begin{equation}
+    \max_{\pi} \;
+    \mathbb{E}_t \Bigl[ \sum_{i \in \mathcal{K}^t} \sum_{k=1}^{\kappa}
+        f_{i,k}(\pi) \Bigr]
+    \quad \text{s.t.\ \eqref{eq:demand}--\eqref{eq:nonneg} with the true } D^t,
+    \label{eq:sparse-obj}
+\end{equation}
+where the expectation is over traffic and topology dynamics. The problem is a
+partially observable sequential decision problem: unlike
+\eqref{eq:obj}--\eqref{eq:nonneg}, the decision variables and the evaluation
+live in different information sets --- the policy sees $O$ and $M$, while
+feasibility and performance are dictated by the hidden $D$.
 
 \subsection{Solution Paradigm}
-% [TODO] 迁移 3.4：三分法（solve-with-zeros / two-stage / end-to-end）；
-% RL 目标 (8)；双轨分离（观测约束输入、真值约束训练信号）
+\label{sec:paradigm}
+
+Three solution families exist for~\eqref{eq:sparse-obj}.
+\emph{Solve-with-zeros} plugs $O$ directly into the
+LP~\eqref{eq:obj}--\eqref{eq:nonneg}, implicitly assuming unmeasured demands
+are zero; it is fast to formulate but structurally starves unmeasured
+traffic. \emph{Two-stage} approaches first estimate $\hat{D}$ from $(H, M)$
+--- via interpolation, tensor completion, or compressive sensing --- then
+solve the LP on $\hat{D}$; estimation is optimized for reconstruction error,
+which is misaligned with allocation quality, and errors propagate un-damped
+into the allocation. We instead adopt \emph{end-to-end learning}:
+parameterize $\pi_\theta$ as a neural network and optimize $\theta$ directly
+against the TE objective,
+\begin{equation}
+    \max_{\theta} \;
+    \mathbb{E} \bigl[ R\bigl(\pi_\theta(H, M, G),\, D\bigr) \bigr],
+    \label{eq:rl-obj}
+\end{equation}
+where $R$ is the total satisfied demand computed on the true $D$. Since $R$
+is non-differentiable through the capacity-constrained network and the true
+$D$ is available only as a training-time signal, we
+optimize~\eqref{eq:rl-obj} with multi-agent reinforcement learning --- each
+demand acts as an agent sharing $\theta$, receiving a COMA-style
+marginal-contribution reward (\cref{sec:design}) --- followed by a
+lightweight ADMM refinement at inference to repair residual violations
+of~\eqref{eq:capacity}. This paradigm makes the observation
+model~\eqref{eq:obs} a property of the \emph{input}, and the optimization
+target~\eqref{eq:sparse-obj} a property of the \emph{training signal},
+cleanly separating what the policy can see from what it is optimized for.
