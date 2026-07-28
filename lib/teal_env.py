@@ -26,7 +26,7 @@ class TealEnv(object):
             num_path, edge_disjoint, dist_metric, rho,
             train_size, val_size, test_size, num_failure, device,
             obs_ratio=1.0, obs_type='flow', hist_len=1, prune_demands=False,
-            demand_split=False,
+            demand_split=False, test_topo=None,
             raw_action_min=-10.0, raw_action_max=10.0):
         """Initialize Teal environment.
 
@@ -52,6 +52,9 @@ class TealEnv(object):
             demand_split: build demand set from training-slice TMs and
                 rebuild from test-slice TMs at test time (zero-retraining
                 generalization), requires prune_demands
+            test_topo: alternative topology json used at test time only;
+                the graph, paths and ADMM are rebuilt while model weights
+                stay unchanged (topology-drift zero-retraining)
             raw_action_min: min value when clamp raw action
             raw_action_max: max value when clamp raw action
         """
@@ -74,7 +77,10 @@ class TealEnv(object):
         self.obs_type = obs_type
         self.hist_len = hist_len
 
-        # init matrices related to topology
+        # init matrices related to topology; topo_active tracks the graph
+        # currently loaded (training topo, or test_topo during testing)
+        self.test_topo = test_topo
+        self.topo_active = topo
         self.G = self._read_graph_json(topo)
         self.capacity = torch.FloatTensor(
             [float(c_e) for u, v, c_e in self.G.edges.data('capacity')])
@@ -113,7 +119,7 @@ class TealEnv(object):
             [t for s, t in self.demand_pairs])
         self.edge_index, self.edge_index_values, self.p2e = \
             self.get_topo_matrix(
-                self.topo, self.num_path, self.edge_disjoint,
+                self.topo_active, self.num_path, self.edge_disjoint,
                 self.dist_metric)
 
         # binary mask over demands: 1 = observed, 0 = unobserved
@@ -136,13 +142,28 @@ class TealEnv(object):
             self.idx_start, self.idx_stop = self.val_start, self.val_stop
         # rebuild demand set from the TMs of the current slice when
         # demand_split is enabled; val reuses the training demand set
+        rebuild = False
         if self.demand_split:
             pair_range = (self.test_start, self.test_stop) if mode == 'test' \
                 else (self.train_start, self.train_stop)
             if pair_range != self.pair_range:
                 self.pair_range = pair_range
-                self._build_graph(self._get_demand_pairs(
-                    self.prune_demands, pair_range))
+                rebuild = True
+        # switch to the perturbed test topology at test time and back to
+        # the training topology otherwise (topology-drift zero-retraining)
+        if self.test_topo is not None:
+            target = self.test_topo if mode == 'test' else self.topo
+            if target != self.topo_active:
+                self.topo_active = target
+                self.G = self._read_graph_json(target)
+                self.capacity = torch.FloatTensor(
+                    [float(c_e) for u, v, c_e
+                        in self.G.edges.data('capacity')])
+                self.num_edge_node = len(self.G.edges)
+                rebuild = True
+        if rebuild:
+            self._build_graph(self._get_demand_pairs(
+                self.prune_demands, self.pair_range))
         self.idx = self.idx_start
         self.obs = self._read_obs()
 

@@ -169,6 +169,10 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         help='build demand set from training-slice TMs only, and rebuild '
              'from test-slice TMs at test time with the same weights '
              '(zero-retraining generalization, requires --prune-demands)')
+    parser.add_argument(
+        '--test-topo', type=str, default=None,
+        help='alternative topology json used at test time only, e.g. a '
+             'perturbed constellation (topology-drift zero-retraining)')
 
     # actor hyper-parameters
     parser.add_argument(

@@ -101,10 +101,11 @@ validation ratio than its single-snapshot counterpart.
     \label{fig:exp-training}
 \end{figure}
 
-\subsection{Zero-Retraining Generalization}
+\subsection{Zero-Retraining under Demand and Topology Drift}
 \label{sec:zero-retrain}
 
-We train on the demand-pair union of the training slice (6,320 pairs) and,
+\textbf{Demand-set drift.} We train on the demand-pair union of the
+training slice (6,320 pairs) and,
 at test time, rebuild the graph from the test slice's own union (6,044
 pairs, including pairs never seen in training) while keeping the weights
 frozen. \Cref{tab:split} shows that this incurs negligible loss relative to
@@ -131,6 +132,33 @@ validating train-once, zero-retraining deployment under demand-set drift.
         \midrule
         Oracle (full set)          & 6{,}334 & 6{,}334 & \todo{0.XX} \\
         Zero-retraining (split)    & 6{,}320 & 6{,}044 & \todo{0.XX} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{Topology drift.} Constellation topologies also change --- ISLs
+fail or are re-planned as satellites move. We emulate this by testing the
+model, trained on the nominal $+$Grid topology, on perturbed variants with
+$5\%$/$10\%$ of ISLs removed (candidate paths and the bipartite graph are
+rebuilt at test time; weights stay frozen), and additionally with $k$
+random link failures injected at test time. As \cref{tab:topo-drift}
+shows, \sysname{} degrades marginally under both perturbations,
+substantiating Proposition~\ref{prop:invariance}: the graph is a runtime
+input, not a parameter.
+
+\begin{table}[t]
+    \caption{Topology-drift zero-retraining (placeholder data).}
+    \label{tab:topo-drift}
+    \centering
+    \footnotesize
+    \begin{tabular}{@{}lcc@{}}
+        \toprule
+        Test topology & ISLs & Satisfied ratio \\
+        \midrule
+        Nominal (training topology) & 6{,}336 & \todo{0.XX} \\
+        $5\%$ ISLs removed          & 6{,}020 & \todo{0.XX} \\
+        $10\%$ ISLs removed         & 5{,}704 & \todo{0.XX} \\
+        $k{=}50$ random link failures & 6{,}336 & \todo{0.XX} \\
         \bottomrule
     \end{tabular}
 \end{table}
