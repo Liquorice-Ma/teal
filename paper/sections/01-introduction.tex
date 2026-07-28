@@ -1,8 +1,7 @@
 \section{Introduction}
 \label{sec:intro}
 
-% 迁移来源：docs/introduction.md（P1-P6 六段式，中文批注勿带入）
-% P1 已迁移作示例；P2-P6 定稿后逐段搬运
+% 迁移自 docs/introduction.md（P1-P6 六段式）
 
 \IEEEPARstart{L}{ow-Earth-orbit} (LEO) satellite constellations are rapidly
 scaling toward tens of thousands of satellites, carrying user traffic with
@@ -15,12 +14,82 @@ therefore become a key control primitive for satellite networks, just as it
 has been for cloud wide-area networks (WANs) over the past
 decade~\cite{teal,smore,dote}.
 
-% [TODO] P2: 学习式 TE 现状与 silent premise（docs/introduction.md）
+A recent line of learning-based TE systems has made centralized control
+practical at scale: by replacing online optimization solvers with neural
+models, they cut allocation time from minutes to milliseconds on
+WANs~\cite{teal,dote,harp} and, most recently, on satellite
+constellations~\cite{sate}. These systems, however, share a silent premise:
+the \emph{complete} traffic matrix --- the demand between every pair of
+nodes --- is assumed to be measured and delivered to the controller at
+every decision epoch.
 
-% [TODO] P3: 稀疏观测现实 + naive 方案失效 + TEST gap~\cite{test
+This premise rarely holds in LEO constellations. Network-wide measurement
+requires every satellite to meter, aggregate, and downlink fine-grained
+flow statistics through bandwidth-constrained telemetry channels, competing
+with user traffic and consuming scarce onboard resources; measurement gaps
+due to intermittent ground contacts and equipment degradation are the norm
+rather than the exception. In practice, the controller observes only a
+\emph{sparse} traffic matrix --- a subset of demands measured at each
+epoch. Naive workarounds fall short on both ends: filling unobserved
+entries with zeros systematically misleads the allocator into starving
+unmeasured demands, while two-stage ``complete-then-optimize'' pipelines
+propagate reconstruction errors into allocation decisions. The
+state-of-the-art sparse-TE approach~\cite{test} fills unobserved entries
+with zeros and compensates with synthetic training augmentation, but it
+targets terrestrial networks with static topologies --- leaving
+sparse-observation TE for dynamic satellite networks unaddressed.
 
-% [TODO] P4: 三大挑战 C1/C2/C3
+Designing a TE system that operates on sparse observations of satellite
+traffic raises three challenges. \textbf{(C1) Representing the
+unobserved.} Unobserved demands are not zero; the model must distinguish
+``no traffic'' from ``not measured'', infer missing volumes from history,
+and prevent placeholder values from contaminating the shared network
+representation during message passing. \textbf{(C2) Perpetual dynamics.}
+Satellites move: topologies, candidate paths, and even the set of active
+demand pairs drift over time. Retraining per snapshot is infeasible; the
+model must be trained once and reused across snapshots unseen in training.
+\textbf{(C3) Constellation scale.} A $22 \times 72$ constellation induces
+2.5 million demand pairs and tens of millions of path variables if modeled
+exhaustively --- beyond the memory and latency budget of any online system.
 
-% [TODO] P5: 方案总览（\sysname 四组件）
+We present \sysname{}, a learning-based TE system for LEO constellations
+that allocates traffic directly from sparse observations. \sysname{}
+builds on the flow-centric GNN and multi-agent RL backbone of
+Teal~\cite{teal} and augments it with three sparse-aware components. First,
+unobserved demands are represented by \emph{learnable mask embeddings}
+rather than zeros, letting the model learn a prior for missing traffic
+(C1). Second, a \emph{mask-aware gated GNN} blocks message passing from
+unobserved path nodes to link nodes --- preventing placeholder pollution of
+link utilization estimates --- while still letting unobserved demands sense
+link states in the reverse direction (C1). Third, a \emph{Transformer
+temporal encoder} summarizes the recent history of sparse observations and
+fuses it with spatial embeddings via per-demand cross-attention, recovering
+missing information from temporal correlation (C1). For deployment at
+scale, \sysname{} prunes the demand set to pairs with observed traffic ---
+${\sim}400\times$ fewer variables on a $22 \times 72$ Starlink-like
+constellation --- and keeps all model weights independent of the demand-set
+size, so a model trained once transfers across topology snapshots and
+drifting demand sets without retraining (C2, C3). Allocations are finally
+refined by a parallelizable ADMM step to repair residual capacity
+violations.
 
-% [TODO] P6: 贡献列表（数字待实验回填）
+In summary, this paper makes the following contributions:
+\begin{itemize}
+    \item We identify sparse traffic observability as a fundamental yet
+    unaddressed constraint for satellite TE, and formulate TE from sparse
+    observations over dynamic constellations
+    (\cref{sec:related,sec:formulation}).
+    \item We design \sysname{}, which combines learnable mask embeddings,
+    mask-aware gated message passing, and temporal-spatial cross-attention
+    to allocate traffic directly from sparse inputs, without an explicit
+    completion stage (\cref{sec:design}).
+    \item We show how demand pruning and size-invariant weights enable
+    train-once, zero-retraining deployment across topology snapshots and
+    drifting demand sets (\cref{sec:design,sec:eval}).
+    \item On a $22 \times 72$ Starlink-like constellation with real
+    topology dynamics, \sysname{} achieves \todo{XX}\% of the
+    fully-observed performance with only \todo{XX}\% observability,
+    outperforming zero-filling and two-stage baselines by
+    \todo{XX--XX}\%, with \todo{XX}~ms inference per snapshot
+    (\cref{sec:eval}).
+\end{itemize}
