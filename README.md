@@ -1,4 +1,4 @@
-# A Glimpse Is Enough: SiTE — Sparse-Input Traffic Engineering for LEO Satellite Constellations
+# A Glimpse Is Enough: SiTE — Mask-Aware Sparse-Input Traffic Engineering for LEO Satellite Constellations
 
 Learning-based traffic engineering (TE) for large-scale LEO satellite
 constellations that operates directly on **sparse traffic observations**:
