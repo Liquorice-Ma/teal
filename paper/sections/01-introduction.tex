@@ -59,7 +59,7 @@ representation during message passing. \textbf{(C2) Perpetual dynamics.}
 Satellites move: topologies, candidate paths, and even the set of active
 demand pairs drift over time. Retraining per snapshot is infeasible; the
 model must be trained once and reused across snapshots unseen in training.
-\textbf{(C3) Constellation scale.} A $22 \times 72$ constellation induces
+\textbf{(C3) Constellation scale.} A 1{,}584-satellite constellation induces
 2.5 million demand pairs and tens of millions of path variables if modeled
 exhaustively --- beyond the memory and latency budget of any online system.
 
@@ -79,7 +79,7 @@ temporal encoder} summarizes the recent history of sparse observations and
 fuses it with spatial embeddings via per-demand cross-attention, recovering
 missing information from temporal correlation (C1). For deployment at
 scale, \sysname{} prunes the demand set to pairs with observed traffic ---
-${\sim}400\times$ fewer variables on a $22 \times 72$ Starlink-like
+${\sim}400\times$ fewer variables on a 1{,}584-satellite Starlink-like
 constellation --- and keeps all model weights independent of the demand-set
 size, so a model trained once transfers across topology snapshots and
 drifting demand sets without retraining (C2, C3). Allocations are finally
@@ -99,7 +99,7 @@ In summary, this paper makes the following contributions:
     \item We show how demand pruning and size-invariant weights enable
     train-once, zero-retraining deployment across topology snapshots and
     drifting demand sets (\cref{sec:design,sec:eval}).
-    \item On a $22 \times 72$ Starlink-like constellation with real
+    \item On a 1{,}584-satellite Starlink-like constellation with real
     topology dynamics, \sysname{} achieves \todo{XX}\% of the
     fully-observed performance with only \todo{XX}\% observability,
     outperforming zero-filling and two-stage baselines by
