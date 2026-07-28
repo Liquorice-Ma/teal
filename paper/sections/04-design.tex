@@ -82,7 +82,8 @@ allocation quality, not reconstruction accuracy.
 
 \sysname{} inherits Teal's flow-centric graph~\cite{teal}: candidate paths
 and physical links form a bipartite structure where a PathNode connects to
-the EdgeNodes it traverses, and message passing alternates between them.
+the EdgeNodes it traverses, and message passing alternates between them
+with GCN-style normalized aggregation~\cite{kipf2017}.
 Under sparse observation, however, symmetric message passing is harmful:
 placeholder values on unmeasured PathNodes would propagate into EdgeNode
 embeddings and corrupt the network-wide estimate of link utilization --- a
@@ -141,7 +142,8 @@ Satellite traffic exhibits strong short-term temporal correlation; the
 recent history of sparse observations therefore carries recoverable
 information about currently missing entries. \sysname{} encodes, for each
 candidate path, its observation sequence over the last $L$ epochs with a
-lightweight Transformer: scalar volumes are log-compressed --- which we find
+lightweight Transformer~\cite{vaswani2017}: scalar volumes are
+log-compressed --- which we find
 essential for training stability --- and projected to $d_{\mathrm{model}}$
 dimensions, summed with learnable positional embeddings, and passed through
 a Transformer encoder; the representation at the latest step forms the
@@ -216,7 +218,8 @@ embeddings --- and hence the outputs --- are permuted identically.
 \sysname{} trains with the multi-agent RL scheme of Teal~\cite{teal}: each
 demand is an agent sharing the policy network. The policy outputs a
 Gaussian mean per path, and actions are sampled during training. To assign
-credit, each agent receives a COMA-style counterfactual reward that
+credit, each agent receives a COMA-style~\cite{foerster2018}
+counterfactual reward that
 estimates its marginal contribution to the global
 objective~\eqref{eq:rl-obj}: for demand $i$,
 \begin{equation}
@@ -237,7 +240,8 @@ imitation learning requires expert allocations solved from \emph{fully
 realized} demands of each episode, a supervision signal that is unavailable
 when even post-hoc observation is sparse; RL needs only the reward, which
 the network itself provides. At inference, allocations are refined by two
-parallelizable ADMM iterations to repair residual violations of the
+parallelizable ADMM~\cite{boyd2011} iterations to repair residual
+violations of the
 capacity constraint~\eqref{eq:capacity}, adding less than 1~ms.
 
 \begin{algorithm}[t]

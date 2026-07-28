@@ -139,7 +139,8 @@ Three solution families exist for~\eqref{eq:sparse-obj}.
 LP~\eqref{eq:obj}--\eqref{eq:nonneg}, implicitly assuming unmeasured demands
 are zero; it is fast to formulate but structurally starves unmeasured
 traffic. \emph{Two-stage} approaches first estimate $\hat{D}$ from $(H, M)$
---- via interpolation, tensor completion, or compressive sensing --- then
+--- via interpolation, tensor completion, or compressive
+sensing~\cite{vardi1996,zhang2003,zhang2009} --- then
 solve the LP on $\hat{D}$; estimation is optimized for reconstruction error,
 which is misaligned with allocation quality, and errors propagate un-damped
 into the allocation. We instead adopt \emph{end-to-end learning}:

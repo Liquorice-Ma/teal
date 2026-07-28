@@ -7,11 +7,13 @@
 \subsection{ML-Driven Traffic Engineering for WANs}
 
 Traffic engineering has long been formulated as a constrained optimization
-problem solved by linear programming (LP), whose runtime scales poorly with
-network size. SMORE~\cite{smore} decouples robust oblivious path selection
+problem~\cite{fortz2000,wang2006} solved by linear programming (LP), whose
+runtime scales poorly with network size. SMORE~\cite{smore} decouples
+robust oblivious path selection
 from online rate adaptation, while NCFlow~\cite{ncflow} and POP~\cite{pop}
 accelerate LP by problem decomposition, trading allocation quality for
-speed. A recent line of work replaces online solvers with learned models:
+speed. A recent line of work replaces online solvers with learned
+models~\cite{valadarsky2017}:
 DOTE~\cite{dote} directly maps historical traffic matrices to split ratios
 with stochastic optimization; Teal~\cite{teal} combines a flow-centric GNN,
 multi-agent RL, and ADMM fine-tuning to achieve near-optimal allocations
@@ -29,7 +31,9 @@ where network-wide measurement is prohibitively expensive.
 
 LEO mega-constellations pose unique challenges for TE: topologies change
 every few tens of milliseconds as satellites move, and control decisions
-must be produced within stringent latency budgets. Classical approaches
+must be produced within stringent latency
+budgets~\cite{handley2018,bhattacherjee2019,kassing2020}. Classical
+approaches
 absorb mobility through topology abstractions --- the virtual node model
 binds logical nodes to earth-fixed footprints so that upper-layer routing
 observes a quasi-static grid~\cite{vn2013}. SaTE~\cite{sate} is the
@@ -54,9 +58,10 @@ Network-wide traffic measurement is expensive: collecting a complete
 traffic matrix requires instrumenting all ingress nodes at fine time
 granularity, which is particularly onerous on resource-constrained
 satellite platforms. A classical workaround is a two-stage pipeline ---
-first estimate or complete the traffic matrix (network tomography, matrix
-completion), then optimize routing on the estimate --- but reconstruction
-errors propagate to and degrade the downstream allocation.
+first estimate or complete the traffic matrix via network
+tomography~\cite{vardi1996,zhang2003}, matrix completion, or compressive
+sensing~\cite{zhang2009}, then optimize routing on the estimate --- but
+reconstruction errors propagate to and degrade the downstream allocation.
 TEST~\cite{test} is, to our knowledge, the first end-to-end approach that
 learns routing policies directly from sparsely measured traffic matrices,
 integrating a Transformer over historical sparse sequences with a GCN over

@@ -3,15 +3,17 @@
 % 迁移自 docs/introduction.md（P1-P6 六段式）；compsoc 模式用 raised heading
 
 \IEEEPARstart{L}{ow-Earth-orbit} (LEO) satellite constellations are rapidly
-scaling toward tens of thousands of satellites, carrying user traffic with
+scaling toward tens of thousands of satellites~\cite{handley2018,
+bhattacherjee2019,giuliari2020}, carrying user traffic with
 pronounced spatial and temporal fluctuations over inter-satellite links
-(ISLs) of limited capacity. Without global coordination, shortest-path or
+(ISLs) of limited capacity~\cite{kassing2020,michel2022}. Without global
+coordination, shortest-path or
 purely distributed routing concentrates traffic on a few congested ISLs,
 leaving network capacity underutilized. Traffic engineering (TE) ---
 centrally optimizing how each demand is split across candidate paths --- has
 therefore become a key control primitive for satellite networks, just as it
 has been for cloud wide-area networks (WANs) over the past
-decade~\cite{teal,smore,dote}.
+decade~\cite{jain2013,hong2013,hong2018,teal}.
 
 A recent line of learning-based TE systems has made centralized control
 practical at scale: by replacing online optimization solvers with neural
