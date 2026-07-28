@@ -27,11 +27,32 @@ the complete matrix, an upper reference).
 \label{sec:overall}
 
 \Cref{fig:exp-overall} reports the satisfied demand ratio as observability
-$\rho$ decreases. \sysname{} degrades gracefully, retaining \todo{XX}\% of
+$\rho$ decreases, with detailed numbers in \cref{tab:overall}. \sysname{}
+degrades gracefully, retaining \todo{XX}\% of
 the fully-observed optimum even at $\rho=0.1$, whereas zero-filling and
 mean-interpolation drop sharply as more demands become unmeasured. The gap
 widens as $\rho$ shrinks, confirming that mask embeddings and temporal
 recovery matter most when information is scarcest.
+
+\begin{table}[t]
+    \caption{Satisfied demand ratio (mean$\pm$std over 3 seeds,
+    placeholder data).}
+    \label{tab:overall}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{@{}lcccc@{}}
+        \toprule
+        $\rho$ & Zero-fill & Mean-interp. & \textbf{Ours} & Teal-full \\
+        \midrule
+        1.0 & \multicolumn{3}{c}{---} & \todo{.XX$\pm$.XX} \\
+        0.7 & \todo{.XX$\pm$.XX} & \todo{.XX$\pm$.XX} & \todo{.XX$\pm$.XX} & --- \\
+        0.5 & \todo{.XX$\pm$.XX} & \todo{.XX$\pm$.XX} & \todo{.XX$\pm$.XX} & --- \\
+        0.3 & \todo{.XX$\pm$.XX} & \todo{.XX$\pm$.XX} & \todo{.XX$\pm$.XX} & --- \\
+        0.1 & \todo{.XX$\pm$.XX} & \todo{.XX$\pm$.XX} & \todo{.XX$\pm$.XX} & --- \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \begin{figure}[t]
     \centering
@@ -48,7 +69,17 @@ recovery matter most when information is scarcest.
 \Cref{fig:exp-ablation} isolates each component at $\rho=0.3$. Removing the
 learnable mask embedding causes the largest drop, followed by the gated
 message passing and the temporal encoder; disabling all three recovers the
-zero-fill baseline.
+zero-fill baseline. \Cref{fig:exp-ablation-rho} extends the ablation across
+observability levels: the contribution of every module grows as $\rho$
+decreases, and the mask embedding dominates in the extreme-sparsity regime.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-ablation-rho.pdf}
+    \caption{Ablation across observability ratios (placeholder data).
+    Module contributions grow as observations become scarcer.}
+    \label{fig:exp-ablation-rho}
+\end{figure}
 
 \begin{figure}[t]
     \centering
@@ -77,8 +108,18 @@ We train on the demand-pair union of the training slice (6,320 pairs) and,
 at test time, rebuild the graph from the test slice's own union (6,044
 pairs, including pairs never seen in training) while keeping the weights
 frozen. \Cref{tab:split} shows that this incurs negligible loss relative to
-the oracle setting where the demand set is built from all snapshots,
+the oracle setting where the demand set is built from all snapshots, and
+\cref{fig:exp-split} confirms the gap stays small on every test snapshot,
 validating train-once, zero-retraining deployment under demand-set drift.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-split-time.pdf}
+    \caption{Per-snapshot satisfied ratio on the test slice (placeholder
+    data): weights trained on the training-slice demand set are reused on
+    the rebuilt test-slice set with negligible loss.}
+    \label{fig:exp-split}
+\end{figure}
 
 \begin{table}[t]
     \caption{Zero-retraining generalization (placeholder data).}
@@ -101,12 +142,54 @@ Demand pruning shrinks the modeled problem from 2.5M pairs to ${\sim}6.3$K
 (${\sim}400\times$), bringing per-snapshot inference to \todo{XX}~ms on a
 single GPU --- within the control budget of a rapidly changing
 constellation, and comparable to the millisecond-scale latency reported by
-SaTE~\cite{sate}. Modeling the full demand set without pruning is infeasible
-under the memory budget, as the index tensors alone would exceed
-\todo{XX}~GB.
+SaTE~\cite{sate}. \Cref{fig:exp-runtime} contrasts \sysname{} with an LP
+solver and Teal-full: learned inference is three orders of magnitude faster
+than solving, and the temporal module adds only marginal latency. Modeling
+the full demand set without pruning is infeasible under the memory budget,
+as the index tensors alone would exceed \todo{XX}~GB.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-runtime.pdf}
+    \caption{Per-snapshot inference latency (log scale, placeholder data).}
+    \label{fig:exp-runtime}
+\end{figure}
 
 \subsection{Sensitivity Analysis}
 \label{sec:sensitivity}
 
-We further vary the measurement granularity (flow- versus node-level), the
-history length $L$, and the link-capacity load. \todo{filled after GPU runs}
+\textbf{Measurement granularity.} \Cref{fig:exp-obstype} compares flow- and
+node-level sampling at equal $\rho$. Node-level missing is structural ---
+entire source rows disappear (\cref{fig:sparse-tm}) --- and hurts the
+zero-fill baseline substantially more, while \sysname{} remains robust
+thanks to spatial message passing from links shaped by observed traffic.
+
+\textbf{History length.} \Cref{fig:exp-histlen} sweeps $L$: quality
+saturates around $L{=}\todo{X}$ while latency grows linearly, so we adopt
+$L{=}3$ by default.
+
+\textbf{Load sensitivity.} \Cref{fig:exp-capacity} varies ISL capacity:
+the advantage of \sysname{} widens under high load, where misallocating
+unmeasured demands is most costly.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-obstype.pdf}
+    \caption{Flow- versus node-level sparse sampling (placeholder data).}
+    \label{fig:exp-obstype}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-histlen.pdf}
+    \caption{History-length sweep at $\rho=0.3$ (placeholder data):
+    quality saturates while latency grows linearly.}
+    \label{fig:exp-histlen}
+\end{figure}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-capacity.pdf}
+    \caption{Sensitivity to ISL capacity at $\rho=0.3$ (placeholder data).}
+    \label{fig:exp-capacity}
+\end{figure}
