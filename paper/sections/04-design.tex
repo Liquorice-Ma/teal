@@ -30,7 +30,7 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
     \Comment{pruning, \cref{sec:scaling}}
 \State rebuild bipartite graph and gated adjacency $\tilde{A}$ from
     $\mathcal{K}^t, M$ \Comment{\cref{eq:gate}}
-\State $x_i \gets M_i d_i + (1-M_i)\theta$ for all $i$
+\State $x_i \gets M_i d_i + (1-M_i)\phi$ for all $i$
     \Comment{mask embedding, \cref{eq:mask-embed}}
 \State $H_S \gets \textsc{GatedFlowGNN}(x, \tilde{A})$
     \Comment{spatial embeddings}
@@ -63,9 +63,9 @@ traffic'' or ``not measured''. Zero-filling --- the de-facto treatment in
 prior sparse TE~\cite{test} --- collapses the two cases and systematically
 biases the allocator toward starving unmeasured demands. \sysname{} instead
 assigns each unmeasured demand a \emph{learnable mask embedding}
-$\theta \in \mathbb{R}^{\kappa}$ (one scalar per candidate path):
+$\phi \in \mathbb{R}^{\kappa}$ (one scalar per candidate path):
 \begin{equation}
-    x_i = M_i \cdot d_i + (1 - M_i) \cdot \theta,
+    x_i = M_i \cdot d_i + (1 - M_i) \cdot \phi,
     \label{eq:mask-embed}
 \end{equation}
 so the model learns a data-driven prior for missing traffic during
@@ -74,7 +74,7 @@ end-to-end training, and --- critically --- the input itself distinguishes
 for incomplete graph features~\cite{t2gnn}; we bring it to TE, where the
 imputed value directly steers resource allocation. The embedding is trained
 jointly with the policy under the TE objective~\eqref{eq:rl-obj} rather than
-a reconstruction loss, so $\theta$ converges to values that maximize
+a reconstruction loss, so $\phi$ converges to values that maximize
 allocation quality, not reconstruction accuracy.
 
 \subsection{Gated Message Passing}
@@ -100,7 +100,33 @@ where $M_p$ is the demand-level mask lifted to path $p$. Unmeasured demands
 thus remain \emph{listeners}: they sense link states --- which are shaped by
 measured traffic --- but inject no fabricated volume into them. The gate is
 a fixed binary function of the mask with no extra parameters, adding zero
-inference overhead.
+inference overhead. The asymmetric gate yields a formal isolation property:
+
+\begin{proposition}[Placeholder isolation]
+\label{prop:isolation}
+Under the gated propagation~\eqref{eq:gate}, the embeddings of all
+EdgeNodes and of all PathNodes belonging to measured demands are
+independent of the mask embedding $\phi$; $\phi$ influences only the
+allocations of unmeasured demands.
+\end{proposition}
+
+\begin{IEEEproof}
+By induction on GNN layers. At layer $0$, only unmeasured PathNodes carry
+$\phi$. At layer $l$, an EdgeNode aggregates path-to-edge messages with
+weights $\tilde{A}[e,p] = M_p A[e,p]$, which vanish for every unmeasured
+path; hence EdgeNode embeddings depend only on measured-path inputs and
+their own history, none of which contains $\phi$. A measured PathNode
+aggregates EdgeNode embeddings ($\phi$-free by the above) and its own
+$\phi$-free input; the per-demand layers mix only paths of the same demand,
+which share the same mask value. Thus $\phi$ never enters any
+$\phi$-free branch, and only unmeasured PathNodes --- and consequently
+their own split ratios --- depend on $\phi$.
+\end{IEEEproof}
+
+In other words, learning a poor prior $\phi$ can at worst misallocate the
+unmeasured demands themselves, but can never corrupt the allocations of
+measured traffic --- a robustness guarantee that zero-filling with
+ungated propagation does not provide.
 
 \subsection{Temporal-Spatial Fusion}
 \label{sec:fusion}
@@ -157,24 +183,77 @@ candidate paths depend only on the orbital displacement between endpoints
 and reduce to $O(N)$ path templates --- and reuses the trained weights
 as-is. Demands outside the modeled set --- necessarily sporadic mice flows
 --- fall back to shortest-path routing until the next set refresh.
+This reuse is justified by the following structural property:
+
+\begin{proposition}[Size invariance and permutation equivariance]
+\label{prop:invariance}
+The parameter set of \sysname{} is independent of $|\mathcal{K}^t|$, $N$,
+and $|E^t|$, and the mapping from inputs to split ratios is equivariant to
+any permutation of the demand indices.
+\end{proposition}
+
+\begin{IEEEproof}
+Every learnable component is a per-node or per-demand operator with shared
+weights: the mask embedding $\phi$ and temporal encoder act on each path
+token, the GNN layers combine node-wise linear maps with sparse
+aggregation, the fusion and policy heads act within each demand. None of
+their parameter shapes involves $|\mathcal{K}^t|$, $N$, or $|E^t|$.
+Permuting demand indices permutes the rows of every input and of the
+bipartite adjacency consistently; since shared node-wise operators commute
+with permutations and sparse aggregation is index-based, all intermediate
+embeddings --- and hence the outputs --- are permuted identically.
+\end{IEEEproof}
 
 \subsection{Training and Constraint Repair}
 \label{sec:training}
 
 \sysname{} trains with the multi-agent RL scheme of Teal~\cite{teal}: each
-demand is an agent sharing the policy network, optimized by a COMA-style
-reward that estimates each agent's marginal contribution to the global
-objective~\eqref{eq:rl-obj}. Two points deserve emphasis. First, the reward
-is computed against \emph{ground-truth} demands during offline training ---
-sparse observation constrains the policy input, never the training signal
---- which is exactly what a simulator or historical trace provides. Second,
-we deliberately retain reward-driven RL rather than imitation
-learning~\cite{fnc}: imitation learning requires expert allocations solved
-from \emph{fully realized} demands of each episode, a supervision signal
-that is unavailable when even post-hoc observation is sparse; RL needs only
-the reward, which the network itself provides. At inference, allocations are
-refined by two parallelizable ADMM iterations to repair residual violations
-of the capacity constraint~\eqref{eq:capacity}, adding less than 1~ms.
+demand is an agent sharing the policy network. The policy outputs a
+Gaussian mean per path, and actions are sampled during training. To assign
+credit, each agent receives a COMA-style counterfactual reward that
+estimates its marginal contribution to the global
+objective~\eqref{eq:rl-obj}: for demand $i$,
+\begin{equation}
+    A_i = \mathbb{E}_{\tilde{r}_i \sim \pi'}
+        \bigl[ R(r_{-i}, r_i) - R(r_{-i}, \tilde{r}_i) \bigr],
+    \label{eq:coma}
+\end{equation}
+where $r_{-i}$ denotes the allocations of all other demands and
+$\tilde{r}_i$ is a counterfactual action resampled from a reference
+distribution $\pi'$; the policy gradient weights each agent's log
+probability by $A_i$. \Cref{alg:train} summarizes offline training. Two
+points deserve emphasis. First, the reward is computed against
+\emph{ground-truth} demands during offline training --- sparse observation
+constrains the policy input, never the training signal --- which is exactly
+what a simulator or historical trace provides. Second, we deliberately
+retain reward-driven RL rather than imitation learning~\cite{fnc}:
+imitation learning requires expert allocations solved from \emph{fully
+realized} demands of each episode, a supervision signal that is unavailable
+when even post-hoc observation is sparse; RL needs only the reward, which
+the network itself provides. At inference, allocations are refined by two
+parallelizable ADMM iterations to repair residual violations of the
+capacity constraint~\eqref{eq:capacity}, adding less than 1~ms.
+
+\begin{algorithm}[t]
+\caption{Offline training of \sysname{}}
+\label{alg:train}
+\begin{algorithmic}[1]
+\Require historical trace $\{(D^t, G^t)\}$, mask $M$, learning rate $\eta$
+\Ensure trained weights $\theta^\star$ (incl.\ mask embedding $\phi$)
+\State build demand set $\mathcal{K}$ and graph from training-slice TMs
+\For{each epoch}
+    \For{each snapshot $t$ in the training slice}
+        \State form sparse input $(H^t, M)$;
+            sample actions $r \sim \pi_\theta(\cdot \mid H^t, M, G^t)$
+        \State compute counterfactual rewards $\{A_i\}$
+            via~\eqref{eq:coma} \textbf{using the true} $D^t$
+        \State $\theta \gets \theta + \eta \sum_i A_i
+            \nabla_\theta \log \pi_\theta(r_i)$
+    \EndFor
+\EndFor
+\State \Return $\theta^\star$
+\end{algorithmic}
+\end{algorithm}
 
 \subsection{Complexity Analysis}
 \label{sec:complexity}

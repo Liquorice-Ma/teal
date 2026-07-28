@@ -23,7 +23,31 @@ shortest paths in our implementation). The TE decision for demand $i$ is a
 split-ratio vector $r_i \in \mathbb{R}^{\kappa}$ with $r_{i,k} \ge 0$ and
 $\sum_k r_{i,k} \le 1$, allocating flow $f_{i,k} = r_{i,k} \cdot d_i$ to path
 $p_{i,k}$; the residual $1 - \sum_k r_{i,k}$ represents intentionally
-unserved traffic.
+unserved traffic. Main notations are summarized in \cref{tab:notation}.
+
+\begin{table}[t]
+    \caption{Main Notations.}
+    \label{tab:notation}
+    \centering
+    \footnotesize
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        Symbol & Definition \\
+        \midrule
+        $G^t=(V,E^t)$ & constellation graph at epoch $t$; $c_e$ link capacity \\
+        $D^t$, $d_i$ & demand matrix; volume of demand $i$ \\
+        $\mathcal{K}^t$ & active demand set at epoch $t$ \\
+        $\kappa$, $P_i$ & candidate paths per demand; path set of demand $i$ \\
+        $r_i$, $f_{i,k}$ & split ratios of demand $i$; flow on path $p_{i,k}$ \\
+        $M$, $\rho$ & binary observation mask; observability ratio \\
+        $O^t$, $H^t$ & sparse observation $D^t{\odot}M$; last-$L$ history \\
+        $\phi$ & learnable mask embedding for unmeasured demands \\
+        $A$, $\tilde{A}$ & bipartite adjacency; its mask-gated variant \\
+        $H_S$, $H_T$, $H_F$ & spatial, temporal, and fused embeddings \\
+        $\pi_\theta$, $R$ & TE policy network; ground-truth reward \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \subsection{TE with Complete Observation}
 \label{sec:complete-te}
