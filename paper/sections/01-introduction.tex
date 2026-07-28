@@ -39,6 +39,16 @@ with zeros and compensates with synthetic training augmentation, but it
 targets terrestrial networks with static topologies --- leaving
 sparse-observation TE for dynamic satellite networks unaddressed.
 
+\begin{figure}[t]
+    \centering
+    % 占位图（ImageGen 草稿）；定稿期矢量重绘
+    \includegraphics[width=\linewidth]{figures/scenario-draft.png}
+    \caption{Sparse traffic observation in an LEO constellation: only a
+    subset of satellites meters traffic, so the controller receives a
+    sparse traffic matrix yet must allocate all demands.}
+    \label{fig:scenario}
+\end{figure}
+
 Designing a TE system that operates on sparse observations of satellite
 traffic raises three challenges. \textbf{(C1) Representing the
 unobserved.} Unobserved demands are not zero; the model must distinguish

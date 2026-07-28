@@ -63,13 +63,25 @@ not ($M_i = 0$), and the controller receives the sparse observation
     O^t = D^t \odot M, \quad \text{together with } M \text{ itself},
     \label{eq:obs}
 \end{equation}
-where $\odot$ is the element-wise product. We consider two measurement
+where $\odot$ is the element-wise product. \Cref{fig:sparse-tm} contrasts a
+ground-truth traffic matrix from our Starlink trace with its node-level
+sparse observation. We consider two measurement
 granularities: \emph{flow-level}, where a fraction $\rho$ of demand pairs is
 sampled, and \emph{node-level}, where a fraction $\rho$ of satellites meter
 all their outgoing demands --- the latter matching deployments where
 measurement capability resides on a subset of satellites. The controller
 additionally retains the last $L$ sparse observations
 $H^t = (O^{t-L+1}, \ldots, O^t)$.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figures/sparse-tm.pdf}
+    \caption{A ground-truth traffic matrix from the Starlink $22{\times}72$
+    trace (150 busiest satellites shown) and its node-level sparse
+    observation: white cells carry no traffic, gray rows are unmeasured
+    source satellites, and colored cells are observed demands.}
+    \label{fig:sparse-tm}
+\end{figure}
 
 \subsubsection{Problem Statement}
 Sparse-observation TE seeks a policy $\pi$ that maps the observable state to
