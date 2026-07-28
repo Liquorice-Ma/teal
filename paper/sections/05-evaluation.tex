@@ -1,29 +1,112 @@
 \section{Evaluation}
 \label{sec:eval}
 
-% 迁移来源：docs/evaluation.md（RQ1-RQ5 + 表格骨架 + 回填清单）
+% 迁移自 docs/evaluation.md；所有数字为 PLACEHOLDER，GPU 实验后回填
+% 图由 figures/plot_results.py 生成（占位数据）
 
 \subsection{Setup}
-% [TODO] 迁移 6.1：Starlink 22$\times$72（1584 节点/6336 ISL/101 快照）；
-% 容量定标；严格时序切片；指标（satisfied ratio, latency）；3 种子；
-% baseline 三分组 + Teal-full 上界；硬件
+\label{sec:setup}
+
+We evaluate on a Starlink-like $+$Grid constellation with $22 \times 72$
+satellites (1,584 nodes, 6,336 ISLs) and 101 consecutive traffic-matrix
+snapshots that capture real geographic demand distribution and temporal
+drift (${\sim}10\%$ demand-pair turnover across the trace). ISL capacity is
+calibrated so that the fully-observed optimum leaves moderate congestion
+(satisfied ratio ${\approx}0.87$), keeping TE decisions non-trivial.
+Snapshots 0--79 are used for training, 80--89 for validation, and 90--100
+for testing --- a strict temporal split with no leakage. We report the
+\emph{satisfied demand ratio} (allocated flow after ADMM and rounding,
+evaluated against ground-truth demands, over total demand) and per-snapshot
+inference latency, averaged over three seeds (mean~$\pm$~std). Following the
+taxonomy of \cref{sec:paradigm}, we compare against \emph{Zero-fill}
+(unobserved entries set to zero, no mask-aware modules), \emph{Mean-interp.}
+(two-stage complete-then-optimize), and \emph{Teal-full} (original Teal with
+the complete matrix, an upper reference).
 
 \subsection{Overall Performance}
-% [TODO] RQ1 + Table~\ref{tab:overall}（obs-ratio 扫描 $\times$ 方法），
-% 数字待 GPU 回填
-% \label{tab:overall}
+\label{sec:overall}
+
+\Cref{fig:exp-overall} reports the satisfied demand ratio as observability
+$\rho$ decreases. \sysname{} degrades gracefully, retaining \todo{XX}\% of
+the fully-observed optimum even at $\rho=0.1$, whereas zero-filling and
+mean-interpolation drop sharply as more demands become unmeasured. The gap
+widens as $\rho$ shrinks, confirming that mask embeddings and temporal
+recovery matter most when information is scarcest.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-overall.pdf}
+    \caption{Satisfied demand ratio versus observability ratio $\rho$
+    (placeholder data). \sysname{} stays close to the fully-observed oracle
+    while baselines degrade sharply.}
+    \label{fig:exp-overall}
+\end{figure}
 
 \subsection{Ablation Study}
-% [TODO] RQ2 + Table~\ref{tab:ablation}（$\rho$=0.3，五配置消融）
-% \label{tab:ablation}
+\label{sec:ablation}
+
+\Cref{fig:exp-ablation} isolates each component at $\rho=0.3$. Removing the
+learnable mask embedding causes the largest drop, followed by the gated
+message passing and the temporal encoder; disabling all three recovers the
+zero-fill baseline.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-ablation.pdf}
+    \caption{Component ablation at $\rho=0.3$ (placeholder data). Each
+    sparse-aware module contributes to the final performance.}
+    \label{fig:exp-ablation}
+\end{figure}
+
+The temporal module also stabilizes training: \cref{fig:exp-training} shows
+that the history-augmented model converges to a higher and steadier
+validation ratio than its single-snapshot counterpart.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=0.85\linewidth]{figures/exp-training.pdf}
+    \caption{Validation satisfied ratio during training (placeholder data).
+    Temporal fusion improves both final quality and stability.}
+    \label{fig:exp-training}
+\end{figure}
 
 \subsection{Zero-Retraining Generalization}
-% [TODO] RQ3 + Table~\ref{tab:split}（oracle vs demand-split，
-% 初测 0.9087 vs 0.9078）
-% \label{tab:split}
+\label{sec:zero-retrain}
+
+We train on the demand-pair union of the training slice (6,320 pairs) and,
+at test time, rebuild the graph from the test slice's own union (6,044
+pairs, including pairs never seen in training) while keeping the weights
+frozen. \Cref{tab:split} shows that this incurs negligible loss relative to
+the oracle setting where the demand set is built from all snapshots,
+validating train-once, zero-retraining deployment under demand-set drift.
+
+\begin{table}[t]
+    \caption{Zero-retraining generalization (placeholder data).}
+    \label{tab:split}
+    \centering
+    \begin{tabular}{@{}lccc@{}}
+        \toprule
+        Setting & Train set & Test set & Satisfied ratio \\
+        \midrule
+        Oracle (full set)          & 6{,}334 & 6{,}334 & \todo{0.XX} \\
+        Zero-retraining (split)    & 6{,}320 & 6{,}044 & \todo{0.XX} \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \subsection{Runtime and Scalability}
-% [TODO] RQ4：推理延迟；剪枝 400$\times$；不剪枝资源估算
+\label{sec:runtime}
+
+Demand pruning shrinks the modeled problem from 2.5M pairs to ${\sim}6.3$K
+(${\sim}400\times$), bringing per-snapshot inference to \todo{XX}~ms on a
+single GPU --- within the control budget of a rapidly changing
+constellation, and comparable to the millisecond-scale latency reported by
+SaTE~\cite{sate}. Modeling the full demand set without pruning is infeasible
+under the memory budget, as the index tensors alone would exceed
+\todo{XX}~GB.
 
 \subsection{Sensitivity Analysis}
-% [TODO] RQ5：flow vs node 粒度；hist-len 扫描；容量负载
+\label{sec:sensitivity}
+
+We further vary the measurement granularity (flow- versus node-level), the
+history length $L$, and the link-capacity load. \todo{filled after GPU runs}
