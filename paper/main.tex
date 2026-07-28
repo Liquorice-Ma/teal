@@ -1,0 +1,65 @@
+\documentclass[journal]{IEEEtran}
+
+% ==== packages ====
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{cleveref}
+
+% ==== macros ====
+% TODO: 定名后全局替换（docs 里的 [SYSTEM-NAME]）
+\newcommand{\sysname}{\textsc{SysName}\xspace}
+\usepackage{xspace}
+% 审稿修改标记（定稿删除）
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+
+\begin{document}
+
+\title{Traffic Engineering for LEO Satellite Networks \\ with Sparse Traffic Observations}
+% TODO: 标题定稿；候选：加 "Learning-Based" / 突出 "Mask-Aware"
+
+\author{%
+    Author~One,
+    Author~Two,
+    and~Author~Three% TODO: 作者与单位、IEEEmembership
+    \thanks{Manuscript received XXX; revised XXX.}%
+    \thanks{A. One is with XXX University (e-mail: xxx@xxx.edu).}%
+}
+
+\markboth{IEEE Transactions on Network Science and Engineering}%
+{One \MakeLowercase{\textit{et al.}}: TE for LEO Satellite Networks with Sparse Traffic Observations}
+
+\maketitle
+
+\begin{abstract}
+% TODO: 摘要最后写（intro 定稿后压缩为 150-250 词）
+% 骨架：背景一句 / gap 一句（现有卫星 TE 假设完整流量矩阵）/ 方案两句
+% （掩码嵌入+门控 GNN+时序融合；剪枝+零重训部署）/ 结果一句（[XX] 数字）
+\todo{abstract after experiments}
+\end{abstract}
+
+\begin{IEEEkeywords}
+Satellite networks, traffic engineering, sparse measurement, graph neural
+networks, reinforcement learning.
+\end{IEEEkeywords}
+
+\IEEEpeerreviewmaketitle
+
+\input{sections/01-introduction}
+\input{sections/02-related-work}
+\input{sections/03-formulation}
+\input{sections/04-design}
+\input{sections/05-evaluation}
+\input{sections/06-conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}

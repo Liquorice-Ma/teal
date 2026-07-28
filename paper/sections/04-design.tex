@@ -1,0 +1,30 @@
+\section{\sysname{} Design}
+\label{sec:design}
+
+% 迁移来源：docs/design.md（4.1 按批注瘦身为 pipeline 总览 + 引用 §III）
+
+\subsection{Overview}
+% [TODO] pipeline 总览一段 + Figure~\ref{fig:arch}（架构图：稀疏 TM+mask →
+% 掩码嵌入 → 门控 GNN ↔ 时序编码 → 交叉注意力融合 → per-demand policy → ADMM），
+% formulation 细节引用 \cref{sec:formulation
+
+% \begin{figure}[t] ... \label{fig:arch}
+
+\subsection{Mask-Aware Demand Representation}
+% [TODO] 迁移 4.2：可学习掩码嵌入 $\theta$；卖点句 trained under the TE
+% objective, not a reconstruction loss；T2-GNN~\cite{t2gnn} 先例
+
+\subsection{Gated Message Passing}
+% [TODO] 迁移 4.3：非对称门控 $\tilde{A}$；listeners 比喻；零参数零开销
+
+\subsection{Temporal-Spatial Fusion}
+% [TODO] 迁移 4.4：Transformer 时序编码（log 压缩稳定性）+ per-demand
+% 交叉注意力；[XX] ms 待回填
+
+\subsection{Scaling to Dynamic Constellations}
+% [TODO] 迁移 4.5：demand 剪枝（2.5M→6.3K，SaTE~\cite{sate} 同源）+ 零重训
+% （runtime inputs, not parameters）+ 路径模板 + 最短路兜底
+
+\subsection{Training and Constraint Repair}
+% [TODO] 迁移 4.6：COMA MARL（复用 Teal~\cite{teal}）；双轨句；
+% RL vs IL~\cite{fnc} 防守点；ADMM 修复
