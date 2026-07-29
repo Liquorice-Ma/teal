@@ -188,3 +188,4 @@ run/logs/
 run/.exp-done
 run/results-summary.csv
 run/lp-oracle-*.csv
+run/result-figs/
