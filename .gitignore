@@ -182,3 +182,9 @@ paper/*.blg
 paper/*.fls
 paper/*.fdb_latexmk
 paper/*.synctex.gz
+
+# experiment runtime artifacts
+run/logs/
+run/.exp-done
+run/results-summary.csv
+run/lp-oracle-*.csv
