@@ -60,6 +60,7 @@ def benchmark(problems, output_csv, arg):
     # sparse observation hyper-parameters
     obs_ratio = args.obs_ratio
     obs_type = args.obs_type
+    obs_sample = args.obs_sample
     hist_len = args.hist_len
     prune_demands = args.prune_demands
     demand_split = args.demand_split
@@ -95,6 +96,7 @@ def benchmark(problems, output_csv, arg):
         device=device,
         obs_ratio=obs_ratio,
         obs_type=obs_type,
+        obs_sample=obs_sample,
         hist_len=hist_len,
         prune_demands=prune_demands,
         demand_split=demand_split,
