@@ -1,0 +1,35 @@
+\section{Conclusion}
+\label{sec:conclusion}
+
+% 迁移自 docs/conclusion.md
+
+This paper presented \sysname{}, the first learning-based traffic
+engineering system for LEO satellite constellations that operates directly
+on sparse traffic observations. \sysname{} resolves the ambiguity of
+unmeasured demands with learnable mask embeddings, protects network-state
+estimates with mask-aware gated message passing, and recovers missing
+information from observation history through temporal-spatial
+cross-attention --- all trained end-to-end against the TE objective without
+an explicit completion stage. Demand pruning and size-invariant weights let
+a model trained once serve drifting topologies and demand sets with zero
+retraining. On a 1{,}584-satellite Starlink-like constellation with real
+traffic dynamics, \sysname{} keeps the realized maximum link utilization
+within \todo{XX}\% of the fully-observed optimum with only \todo{XX}\%
+observability --- and retains \todo{XX}\% of the optimum under the
+throughput objective --- outperforming zero-filling
+and two-stage baselines by \todo{XX--XX}\%, at \todo{XX}~ms inference per
+snapshot.
+
+Three directions remain open. First, our observation masks are static
+within a trace; real measurement availability fluctuates with
+ground-contact windows and onboard load, motivating time-varying masks and
+measurement scheduling --- deciding \emph{which} demands to measure next
+--- as a joint control problem. Second, our input-side modules are
+orthogonal to the training paradigm: combining them with imitation
+learning~\cite{fnc} where post-hoc complete traces are available, or with
+hybrid schemes, may improve sample efficiency. Third, the path templates of
++Grid constellations suggest an $O(1)$ displacement-indexed path lookup
+that we currently approximate with per-set path caching; a full
+implementation would further cut graph-rebuild latency. We also plan to
+validate on measured (rather than synthesized) satellite traffic as such
+datasets become available.

@@ -8,7 +8,7 @@
 ## 章节骨架
 
 ```
-§4 [SYSTEM-NAME] Design
+§4 SiTE Design
   4.1 Overview & Problem Formulation     — 稀疏观测 TE 问题定义 + 流水线总览
   4.2 Mask-Aware Demand Representation   — 创新 1：可学习掩码嵌入（C1）
   4.3 Gated Message Passing              — 创新 2：掩码感知门控 GNN（C1）
@@ -34,7 +34,7 @@ allocator must decide for *all* active demands — including unmeasured ones —
 using only the sparse observation and a short history of past sparse
 observations {D^(t-L+1) ⊙ M, ..., D^(t) ⊙ M}.
 
-[SYSTEM-NAME] processes a sparse observation in four stages: (i) unmeasured
+SiTE processes a sparse observation in four stages: (i) unmeasured
 demands are represented by a learnable mask embedding (§4.2); (ii) a mask-aware
 gated GNN propagates information between candidate paths and links without
 letting placeholders contaminate link states (§4.3); (iii) a Transformer
@@ -58,7 +58,7 @@ zero-retraining deployment under constellation dynamics.
 A sparse observation is fundamentally ambiguous: a zero entry may mean "no
 traffic" or "not measured". Zero-filling — the de-facto treatment in prior
 sparse TE [TEST] — collapses the two cases and systematically biases the
-allocator toward starving unmeasured demands. [SYSTEM-NAME] instead assigns
+allocator toward starving unmeasured demands. SiTE instead assigns
 each unmeasured demand a *learnable mask embedding* θ ∈ R^K (one scalar per
 candidate path):
 
@@ -83,7 +83,7 @@ that maximize allocation quality, not reconstruction accuracy.
 
 **English draft:**
 
-[SYSTEM-NAME] inherits Teal's flow-centric graph: candidate paths and physical
+SiTE inherits Teal's flow-centric graph: candidate paths and physical
 links form a bipartite structure where a PathNode connects to the EdgeNodes it
 traverses, and message passing alternates between them. Under sparse
 observation, however, symmetric message passing is harmful: placeholder values
@@ -117,7 +117,7 @@ zero inference overhead.
 
 Satellite traffic exhibits strong short-term temporal correlation; the recent
 history of sparse observations therefore carries recoverable information about
-currently missing entries. [SYSTEM-NAME] encodes, for each candidate path, its
+currently missing entries. SiTE encodes, for each candidate path, its
 observation sequence over the last L epochs with a lightweight Transformer:
 scalar volumes are log-compressed and projected to d_model dimensions, summed
 with learnable positional embeddings, and passed through a Transformer encoder;
@@ -153,13 +153,13 @@ inference on our largest constellation (§6).
 constellation yields 2.5M demands and tens of millions of path variables —
 infeasible for online control. Satellite traffic, however, is geographically
 concentrated: only 0.25% of pairs ever carry traffic in our dataset.
-[SYSTEM-NAME] instantiates PathNodes only for the demand-pair union observed
+SiTE instantiates PathNodes only for the demand-pair union observed
 in historical TMs, shrinking the graph by ~400× with no loss of served
 traffic, in the same spirit as SaTE's traffic pruning [SaTE].
 
 **Zero-retraining under drift.** Pruned demand sets are not static: as
 satellites move, the active pair set drifts (we measure ~10% turnover across
-our trace, §6). Rather than retraining, [SYSTEM-NAME] exploits a structural
+our trace, §6). Rather than retraining, SiTE exploits a structural
 property of its architecture: every learnable component — GNN layers, mask
 embedding, temporal encoder, fusion and policy heads — is shared across
 demands and independent of the demand-set size. The demand set, candidate
@@ -184,7 +184,7 @@ routing until the next set refresh.
 
 **English draft:**
 
-[SYSTEM-NAME] trains with the multi-agent RL scheme of Teal: each demand is an
+SiTE trains with the multi-agent RL scheme of Teal: each demand is an
 agent sharing the policy network, optimized by a COMA-style reward that
 estimates each agent's marginal contribution to the global objective. Two
 points deserve emphasis. First, the reward is computed against *ground-truth*

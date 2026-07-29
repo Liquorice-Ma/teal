@@ -25,8 +25,9 @@ class TealEnv(object):
             self, obj, topo, problems,
             num_path, edge_disjoint, dist_metric, rho,
             train_size, val_size, test_size, num_failure, device,
-            obs_ratio=1.0, obs_type='flow', hist_len=1, prune_demands=False,
-            demand_split=False,
+            obs_ratio=1.0, obs_type='flow', obs_sample='uniform',
+            hist_len=1, prune_demands=False,
+            demand_split=False, test_topo=None,
             raw_action_min=-10.0, raw_action_max=10.0):
         """Initialize Teal environment.
 
@@ -46,12 +47,18 @@ class TealEnv(object):
             obs_ratio: ratio of observed node pairs in sparse observation
             obs_type: sampling granularity, 'flow' samples demand pairs,
                 'node' samples source nodes with all outgoing demands observed
+            obs_sample: 'uniform' random sampling, or 'top' which meters
+                the largest flows (80\% by training-slice mean volume,
+                20\% random), following TEST's protocol
             hist_len: number of historical traffic matrices as model input
             prune_demands: only keep node pairs with nonzero demand in any
                 traffic matrix (for sparse satellite traffic)
             demand_split: build demand set from training-slice TMs and
                 rebuild from test-slice TMs at test time (zero-retraining
                 generalization), requires prune_demands
+            test_topo: alternative topology json used at test time only;
+                the graph, paths and ADMM are rebuilt while model weights
+                stay unchanged (topology-drift zero-retraining)
             raw_action_min: min value when clamp raw action
             raw_action_max: max value when clamp raw action
         """
@@ -72,9 +79,13 @@ class TealEnv(object):
         # sparse observation: observed ratio and history window length
         self.obs_ratio = obs_ratio
         self.obs_type = obs_type
+        self.obs_sample = obs_sample
         self.hist_len = hist_len
 
-        # init matrices related to topology
+        # init matrices related to topology; topo_active tracks the graph
+        # currently loaded (training topo, or test_topo during testing)
+        self.test_topo = test_topo
+        self.topo_active = topo
         self.G = self._read_graph_json(topo)
         self.capacity = torch.FloatTensor(
             [float(c_e) for u, v, c_e in self.G.edges.data('capacity')])
@@ -113,7 +124,7 @@ class TealEnv(object):
             [t for s, t in self.demand_pairs])
         self.edge_index, self.edge_index_values, self.p2e = \
             self.get_topo_matrix(
-                self.topo, self.num_path, self.edge_disjoint,
+                self.topo_active, self.num_path, self.edge_disjoint,
                 self.dist_metric)
 
         # binary mask over demands: 1 = observed, 0 = unobserved
@@ -136,13 +147,28 @@ class TealEnv(object):
             self.idx_start, self.idx_stop = self.val_start, self.val_stop
         # rebuild demand set from the TMs of the current slice when
         # demand_split is enabled; val reuses the training demand set
+        rebuild = False
         if self.demand_split:
             pair_range = (self.test_start, self.test_stop) if mode == 'test' \
                 else (self.train_start, self.train_stop)
             if pair_range != self.pair_range:
                 self.pair_range = pair_range
-                self._build_graph(self._get_demand_pairs(
-                    self.prune_demands, pair_range))
+                rebuild = True
+        # switch to the perturbed test topology at test time and back to
+        # the training topology otherwise (topology-drift zero-retraining)
+        if self.test_topo is not None:
+            target = self.test_topo if mode == 'test' else self.topo
+            if target != self.topo_active:
+                self.topo_active = target
+                self.G = self._read_graph_json(target)
+                self.capacity = torch.FloatTensor(
+                    [float(c_e) for u, v, c_e
+                        in self.G.edges.data('capacity')])
+                self.num_edge_node = len(self.G.edges)
+                rebuild = True
+        if rebuild:
+            self._build_graph(self._get_demand_pairs(
+                self.prune_demands, self.pair_range))
         self.idx = self.idx_start
         self.obs = self._read_obs()
 
@@ -188,6 +214,25 @@ class TealEnv(object):
             mask = torch.FloatTensor(
                 [1. if node_observed[s] else 0.
                     for s, t in self.demand_pairs])
+        elif self.obs_sample == 'top':
+            # TEST-style: 80% of the budget meters the largest flows by
+            # training-slice mean volume, 20% is random exploration
+            num_observed = max(1, int(round(self.num_demand * self.obs_ratio)))
+            num_top = int(round(num_observed * 0.8))
+            mean_demand = torch.zeros(self.num_demand)
+            for _, _, tm_fname in self.problems[
+                    self.train_start:self.train_stop]:
+                with open(tm_fname, 'rb') as f:
+                    tm = pickle.load(f)
+                mean_demand += torch.FloatTensor(tm)[
+                    self.demand_src, self.demand_dst]
+            top_idx = torch.argsort(mean_demand, descending=True)[:num_top]
+            mask = torch.zeros(self.num_demand)
+            mask[top_idx] = 1
+            rest = torch.nonzero(mask == 0).flatten()
+            rand_idx = rest[torch.randperm(
+                rest.numel(), generator=generator)[:num_observed - num_top]]
+            mask[rand_idx] = 1
         else:
             num_observed = max(1, int(round(self.num_demand * self.obs_ratio)))
             idx_observed = torch.randperm(
@@ -334,9 +379,14 @@ class TealEnv(object):
             raw_action, min=self.raw_action_min, max=self.raw_action_max)
 
         # translate ML output to split ratio through softmax
-        # 1 in softmax represent unallocated traffic
         raw_action = raw_action.exp()
-        raw_action = raw_action/(1+raw_action.sum(axis=-1)[:, None])
+        if self.obj == 'min_max_link_util':
+            # flow conservation: ratios sum to one (no unserved residual),
+            # preventing artificially low MLU via under-serving demands
+            raw_action = raw_action/raw_action.sum(axis=-1)[:, None]
+        else:
+            # 1 in softmax represents unallocated traffic
+            raw_action = raw_action/(1+raw_action.sum(axis=-1)[:, None])
 
         # translate split ratio to flow
         raw_action = raw_action.flatten() * self.obs[-self.num_path_node:]

@@ -1,0 +1,112 @@
+\section{Related Work}
+\label{sec:related}
+
+% 迁移自 docs/related_work.md；LMTE venue 未定暂不引用；
+% FIGRET/NetLLM 已入 bib（author 待核对）
+
+\subsection{ML-Driven Traffic Engineering for WANs}
+
+Traffic engineering has long been formulated as a constrained optimization
+problem~\cite{fortz2000,wang2006} solved by linear programming (LP), whose
+runtime scales poorly with network size. SMORE~\cite{smore} decouples
+robust oblivious path selection
+from online rate adaptation, while NCFlow~\cite{ncflow} and POP~\cite{pop}
+accelerate LP by problem decomposition, trading allocation quality for
+speed. A recent line of work replaces online solvers with learned
+models~\cite{valadarsky2017}:
+DOTE~\cite{dote} directly maps historical traffic matrices to split ratios
+with stochastic optimization; Teal~\cite{teal} combines a flow-centric GNN,
+multi-agent RL, and ADMM fine-tuning to achieve near-optimal allocations
+with orders-of-magnitude speedups; FIGRET~\cite{figret} enhances robustness
+against traffic uncertainty at per-flow granularity. To survive topology
+changes without retraining, HARP~\cite{harp} enforces invariances to node
+permutation and tunnel reordering, transferring across topologies unseen in
+training. More recently, large language models have been explored as
+general-purpose traffic planners~\cite{netllm}. However, all of these
+systems assume the \emph{complete} traffic matrix is available at decision
+time --- an assumption that rarely holds in large-scale satellite networks,
+where network-wide measurement is prohibitively expensive.
+
+\subsection{TE and Routing for Satellite Networks}
+
+LEO mega-constellations pose unique challenges for TE: topologies change
+every few tens of milliseconds as satellites move, and control decisions
+must be produced within stringent latency
+budgets~\cite{handley2018,bhattacherjee2019,kassing2020}. Classical
+approaches
+absorb mobility through topology abstractions --- the virtual node model
+binds logical nodes to earth-fixed footprints so that upper-layer routing
+observes a quasi-static grid~\cite{vn2013}. Optimization-based satellite
+TE has explored segment routing~\cite{hu2022}, distributed clustering
+that optimizes elephant flows separately~\cite{wei2024}, and supervised
+learning for distributed split-ratio prediction~\cite{flexsate2024}.
+SaTE~\cite{sate} is the
+state-of-the-art learning-based TE for satellite constellations: it
+formulates a heterogeneous graph over satellites, demands, paths, and links,
+prunes zero-traffic relations to make training tractable on a single GPU,
+and selects representative topologies via Graph2Vec and DPP sampling so that
+one trained model generalizes across topology snapshots with millisecond
+inference. In parallel, FNC~\cite{fnc,fnc-infocom} targets dynamic traffic
+allocation for earth-observation constellations, replacing RL with
+end-to-end imitation learning and substituting iterative constraint solvers
+with normalization-based feasibility layers. Notably, FNC's imitation
+learning constructs its expert supervision by solving an offline optimum
+over the \emph{fully realized} demands of each episode --- a paradigm that
+fundamentally requires complete post-hoc observability, which is unavailable
+under sparse measurement. Both SaTE and FNC, like their WAN counterparts,
+assume the traffic matrix is fully observable at decision time.
+
+\subsection{TE with Incomplete Traffic Observations}
+
+Network-wide traffic measurement is expensive: collecting a complete
+traffic matrix requires instrumenting all ingress nodes at fine time
+granularity, which is particularly onerous on resource-constrained
+satellite platforms. A classical workaround is a two-stage pipeline ---
+first estimate or complete the traffic matrix via network
+tomography~\cite{vardi1996,zhang2003}, matrix completion, or compressive
+sensing~\cite{zhang2009}, then optimize routing on the estimate --- but
+reconstruction errors propagate to and degrade the downstream allocation.
+TEST~\cite{test} is, to our knowledge, the first end-to-end approach that
+learns routing policies directly from sparsely measured traffic matrices,
+integrating a Transformer over historical sparse sequences with a GCN over
+the topology; it fills unobserved entries with zeros, compensates with
+synthesized training augmentation, and targets terrestrial networks with
+static topologies. In the graph learning literature, message passing under
+missing node features has been addressed via teacher--student
+distillation~\cite{t2gnn}, but such techniques have not been applied to
+network TE. No prior work, to our knowledge, performs TE from sparse
+traffic observations in satellite networks, where the difficulty is
+compounded by time-varying topologies and drifting demand sets.
+
+\subsection{Positioning}
+
+\begin{table}[t]
+    \caption{Comparison with the closest prior systems.}
+    \label{tab:related}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{3pt}
+    \begin{tabular}{@{}lccccc@{}}
+        \toprule
+        & Teal~\cite{teal} & SaTE~\cite{sate} & TEST~\cite{test}
+        & FNC~\cite{fnc} & \textbf{Ours} \\
+        \midrule
+        Satellite scenario      & \xmark & \cmark & \xmark & \cmark & \cmark \\
+        Dynamic topology        & \xmark & \cmark & \xmark & \cmark & \cmark \\
+        Sparse observation      & \xmark & \xmark & \cmark & \xmark & \cmark \\
+        Temporal modeling       & \xmark & \xmark & \cmark & \xmark & \cmark \\
+        Mask-aware model        & \xmark & \xmark & \xmark & \xmark & \cmark \\
+        Demand-set drift        & \xmark & partial & \xmark & \xmark & \cmark \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+Our work sits at the intersection of these three lines
+(\cref{tab:related}). Unlike SaTE and FNC, which assume fully observable
+demands, we perform TE from sparse observations (10\%--70\% observability).
+Unlike TEST, which fills unobserved entries with zeros and targets static
+terrestrial networks, we replace missing entries with learnable mask
+embeddings, gate their message passing, and handle LEO dynamics ---
+time-varying topologies and drifting demand-pair sets --- via demand
+pruning with size-invariant model weights, enabling train-once,
+zero-retraining deployment.

@@ -1,0 +1,291 @@
+\section{\sysname{} Design}
+\label{sec:design}
+
+% 迁移自 docs/design.md；4.1 已按批注瘦身为 pipeline 总览
+
+\subsection{Overview}
+\label{sec:overview}
+
+\sysname{} solves the sparse-observation TE problem of
+\cref{sec:sparse-te} in four stages, as illustrated in
+\cref{fig:arch}. Given the sparse observation $(O^t, M)$ and history $H^t$,
+(i) unmeasured demands are represented by a learnable mask embedding
+(\cref{sec:mask-embed}); (ii) a mask-aware gated GNN propagates information
+between candidate paths and links without letting placeholders contaminate
+link states (\cref{sec:gating}); (iii) a Transformer encodes the observation
+history and fuses it with spatial embeddings via per-demand cross-attention
+(\cref{sec:fusion}); (iv) a shared policy head outputs split ratios per
+demand, refined by ADMM (\cref{sec:training}). All learnable weights are
+shared across demands and independent of the demand-set size, which
+\cref{sec:scaling} exploits for zero-retraining deployment under
+constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
+
+\begin{algorithm}[t]
+\caption{\sysname{} inference at control epoch $t$}
+\label{alg:infer}
+\begin{algorithmic}[1]
+\Require sparse history $H^t$, mask $M$, topology $G^t$, weights $\theta^\star$
+\Ensure split ratios $\{r_i\}_{i\in\mathcal{K}^t}$
+\State $\mathcal{K}^t \gets$ active demand set from recent history
+    \Comment{pruning, \cref{sec:scaling}}
+\State rebuild bipartite graph and gated adjacency $\tilde{A}$ from
+    $\mathcal{K}^t, M$ \Comment{\cref{eq:gate}}
+\State $x_i \gets M_i d_i + (1-M_i)\phi$ for all $i$
+    \Comment{mask embedding, \cref{eq:mask-embed}}
+\State $H_S \gets \textsc{GatedFlowGNN}(x, \tilde{A})$
+    \Comment{spatial embeddings}
+\State $H_T \gets \textsc{TemporalEncoder}(H^t)$
+    \Comment{temporal embeddings}
+\State $H_F \gets \textsc{CrossAttention}(H_T, H_S)$ \Comment{\cref{eq:fusion}}
+\State $\{r_i\} \gets \textsc{PolicyHead}([H_S \,\|\, H_F])$
+\State $\{r_i\} \gets \textsc{ADMMRepair}(\{r_i\}, G^t)$
+    \Comment{\cref{sec:training}}
+\State \Return $\{r_i\}$
+\end{algorithmic}
+\end{algorithm}
+
+\begin{figure}[t]
+    \centering
+    % 占位图（ImageGen 草稿）；布局定稿后用 TikZ 矢量重绘
+    \includegraphics[width=\linewidth]{figures/architecture-draft.png}
+    \caption{\sysname{} overview: a sparse observation is embedded with
+    mask awareness, processed by a gated flow-centric GNN in parallel with a
+    temporal encoder, fused via per-demand cross-attention, and mapped to
+    split ratios refined by ADMM.}
+    \label{fig:arch}
+\end{figure}
+
+\subsection{Mask-Aware Demand Representation}
+\label{sec:mask-embed}
+
+A sparse observation is fundamentally ambiguous: a zero entry may mean ``no
+traffic'' or ``not measured''. Zero-filling --- the de-facto treatment in
+prior sparse TE~\cite{test} --- collapses the two cases and systematically
+biases the allocator toward starving unmeasured demands. \sysname{} instead
+assigns each unmeasured demand a \emph{learnable mask embedding}
+$\phi \in \mathbb{R}^{\kappa}$ (one scalar per candidate path):
+\begin{equation}
+    x_i = M_i \cdot d_i + (1 - M_i) \cdot \phi,
+    \label{eq:mask-embed}
+\end{equation}
+so the model learns a data-driven prior for missing traffic during
+end-to-end training, and --- critically --- the input itself distinguishes
+``not measured'' from ``zero''. Learnable imputation has proven effective
+for incomplete graph features~\cite{t2gnn}; we bring it to TE, where the
+imputed value directly steers resource allocation. The embedding is trained
+jointly with the policy under the TE objective~\eqref{eq:rl-obj} rather than
+a reconstruction loss, so $\phi$ converges to values that maximize
+allocation quality, not reconstruction accuracy.
+
+\subsection{Gated Message Passing}
+\label{sec:gating}
+
+\sysname{} inherits Teal's flow-centric graph~\cite{teal}: candidate paths
+and physical links form a bipartite structure where a PathNode connects to
+the EdgeNodes it traverses, and message passing alternates between them
+with GCN-style normalized aggregation~\cite{kipf2017}.
+Under sparse observation, however, symmetric message passing is harmful:
+placeholder values on unmeasured PathNodes would propagate into EdgeNode
+embeddings and corrupt the network-wide estimate of link utilization --- a
+phenomenon consistent with the feature--structure interference observed in
+incomplete graphs~\cite{t2gnn}. We therefore gate the propagation
+\emph{asymmetrically}. Let $A$ be the normalized bipartite adjacency; we
+zero out entries that carry path-to-edge messages from unmeasured paths
+while keeping all edge-to-path entries:
+\begin{equation}
+    \tilde{A}[e, p] = M_p \cdot A[e, p], \qquad
+    \tilde{A}[p, e] = A[p, e],
+    \label{eq:gate}
+\end{equation}
+where $M_p$ is the demand-level mask lifted to path $p$. Unmeasured demands
+thus remain \emph{listeners}: they sense link states --- which are shaped by
+measured traffic --- but inject no fabricated volume into them. The gate is
+a fixed binary function of the mask with no extra parameters, adding zero
+inference overhead. The asymmetric gate yields a formal isolation property:
+
+\begin{proposition}[Placeholder isolation]
+\label{prop:isolation}
+Under the gated propagation~\eqref{eq:gate}, the embeddings of all
+EdgeNodes and of all PathNodes belonging to measured demands are
+independent of the mask embedding $\phi$; $\phi$ influences only the
+allocations of unmeasured demands.
+\end{proposition}
+
+\begin{IEEEproof}
+Consider first the spatial stream, by induction on GNN layers. At layer
+$0$, only unmeasured PathNodes carry $\phi$. At layer $l$, an EdgeNode
+aggregates path-to-edge messages with weights
+$\tilde{A}[e,p] = M_p A[e,p]$, which vanish for every unmeasured path;
+hence EdgeNode embeddings depend only on measured-path inputs and their
+own history, none of which contains $\phi$. A measured PathNode aggregates
+EdgeNode embeddings ($\phi$-free by the above) and its own $\phi$-free
+input; the per-demand layers mix only paths of the same demand, which
+share the same mask value. The temporal and fusion streams preserve the
+property: the temporal encoder acts per path on the raw observation
+history $H^t$, which contains no $\phi$ by construction, and the
+cross-attention of~\eqref{eq:fusion} operates strictly within each demand,
+so the fused features of a measured demand combine only its own
+$\phi$-free temporal and spatial embeddings. Thus $\phi$ never enters any
+$\phi$-free branch, and only unmeasured PathNodes --- and consequently
+their own split ratios --- depend on $\phi$.
+\end{IEEEproof}
+
+In other words, learning a poor prior $\phi$ can at worst misallocate the
+unmeasured demands themselves, but can never corrupt the allocations of
+measured traffic --- a robustness guarantee that zero-filling with
+ungated propagation does not provide.
+
+\subsection{Temporal-Spatial Fusion}
+\label{sec:fusion}
+
+Satellite traffic exhibits strong short-term temporal correlation; the
+recent history of sparse observations therefore carries recoverable
+information about currently missing entries. \sysname{} encodes, for each
+candidate path, its observation sequence over the last $L$ epochs with a
+lightweight Transformer~\cite{vaswani2017}: scalar volumes are
+log-compressed --- which we find
+essential for training stability --- and projected to $d_{\mathrm{model}}$
+dimensions, summed with learnable positional embeddings, and passed through
+a Transformer encoder; the representation at the latest step forms the
+temporal embedding $H_T$. Rather than concatenating temporal and spatial
+features naively, we fuse them with \emph{per-demand cross-attention}:
+within each demand, temporal embeddings of its $\kappa$ candidate paths act
+as queries attending to the $\kappa$ spatial (GNN) embeddings $H_S$ as keys
+and values,
+\begin{equation}
+    H_F = \mathrm{softmax}\!\left(
+        \frac{W_q H_T \, (W_k H_S)^{\top}}{\sqrt{d}}
+    \right) W_v H_S,
+    \label{eq:fusion}
+\end{equation}
+and the fused features $[H_S \,\|\, H_F]$ feed the policy head. Intuitively,
+the temporal stream decides \emph{which} spatial evidence to trust for each
+path: when the current entry is missing, attention shifts toward paths and
+links whose states corroborate the historical pattern. The whole module adds
+\todo{XX}~ms to inference on our largest constellation
+(\cref{sec:eval}).
+
+\subsection{Scaling to Dynamic Constellations}
+\label{sec:scaling}
+
+\subsubsection{Demand Pruning}
+Modeling all $N(N-1)$ pairs of a 1,584-satellite constellation yields 2.5M
+demands and tens of millions of path variables --- infeasible for online
+control. Satellite traffic, however, is geographically concentrated: only
+0.25\% of pairs ever carry traffic in our dataset. \sysname{} instantiates
+PathNodes only for the demand-pair union observed in historical traffic
+matrices, shrinking the graph by ${\sim}400\times$ with no loss of served
+traffic, in the same spirit as SaTE's traffic pruning~\cite{sate}.
+
+\subsubsection{Zero-Retraining under Drift}
+Pruned demand sets are not static: as satellites move, the active pair set
+drifts (we measure ${\sim}10\%$ turnover across our trace,
+\cref{sec:eval}). Rather than retraining, \sysname{} exploits a structural
+property of its architecture: every learnable component --- GNN layers, mask
+embedding, temporal encoder, fusion and policy heads --- is shared across
+demands and independent of the demand-set size. The demand set, candidate
+paths, and the bipartite graph are runtime \emph{inputs}, not parameters. At
+each control epoch the controller rebuilds the graph from the current active
+set --- a millisecond-scale index operation on +Grid constellations, where
+candidate paths depend only on the orbital displacement between endpoints
+and reduce to $O(N)$ path templates --- and reuses the trained weights
+as-is. Demands outside the modeled set --- necessarily sporadic mice flows
+--- fall back to shortest-path routing until the next set refresh.
+This reuse is justified by the following structural property:
+
+\begin{proposition}[Size invariance and permutation equivariance]
+\label{prop:invariance}
+The parameter set of \sysname{} is independent of $|\mathcal{K}^t|$, $N$,
+and $|E^t|$, and the mapping from inputs to split ratios is equivariant to
+any permutation of the demand indices.
+\end{proposition}
+
+\begin{IEEEproof}
+Every learnable component is a per-node or per-demand operator with shared
+weights: the mask embedding $\phi$ and temporal encoder act on each path
+token, the GNN layers combine node-wise linear maps with sparse
+aggregation, the fusion and policy heads act within each demand. None of
+their parameter shapes involves $|\mathcal{K}^t|$, $N$, or $|E^t|$.
+Permuting demand indices permutes the rows of every input and of the
+bipartite adjacency consistently; since shared node-wise operators commute
+with permutations and sparse aggregation is index-based, all intermediate
+embeddings --- and hence the outputs --- are permuted identically.
+\end{IEEEproof}
+
+\subsection{Training and Constraint Repair}
+\label{sec:training}
+
+\sysname{} trains with the multi-agent RL scheme of Teal~\cite{teal}: each
+demand is an agent sharing the policy network. The policy outputs a
+Gaussian mean per path, and actions are sampled during training. To assign
+credit, each agent receives a COMA-style~\cite{foerster2018}
+counterfactual reward that
+estimates its marginal contribution to the global
+objective~\eqref{eq:rl-obj}: for demand $i$,
+\begin{equation}
+    A_i = \mathbb{E}_{\tilde{r}_i \sim \pi'}
+        \bigl[ R(r_{-i}, r_i) - R(r_{-i}, \tilde{r}_i) \bigr],
+    \label{eq:coma}
+\end{equation}
+where $r_{-i}$ denotes the allocations of all other demands and
+$\tilde{r}_i$ is a counterfactual action resampled from a reference
+distribution $\pi'$; the policy gradient weights each agent's log
+probability by $A_i$. \Cref{alg:train} summarizes offline training. Two
+points deserve emphasis. First, the reward is computed against
+\emph{ground-truth} demands during offline training --- sparse observation
+constrains the policy input, never the training signal --- which is exactly
+what a simulator or historical trace provides. Second, we deliberately
+retain reward-driven RL rather than imitation learning~\cite{fnc}:
+imitation learning requires expert allocations solved from \emph{fully
+realized} demands of each episode, a supervision signal that is unavailable
+when even post-hoc observation is sparse; RL needs only the reward, which
+the network itself provides. At inference, the MLU objective requires no
+repair --- the pure-softmax ratios satisfy flow
+conservation~\eqref{eq:conserve} by construction --- while under the
+throughput objective allocations are refined by two parallelizable
+ADMM~\cite{boyd2011} iterations to repair residual violations of the
+capacity constraint~\eqref{eq:capacity}, adding less than 1~ms.
+
+\begin{algorithm}[t]
+\caption{Offline training of \sysname{}}
+\label{alg:train}
+\begin{algorithmic}[1]
+\Require historical trace $\{(D^t, G^t)\}$, mask $M$, learning rate $\eta$
+\Ensure trained weights $\theta^\star$ (incl.\ mask embedding $\phi$)
+\State build demand set $\mathcal{K}$ and graph from training-slice TMs
+\For{each epoch}
+    \For{each snapshot $t$ in the training slice}
+        \State form sparse input $(H^t, M)$;
+            sample actions $r \sim \pi_\theta(\cdot \mid H^t, M, G^t)$
+        \State compute counterfactual rewards $\{A_i\}$
+            via~\eqref{eq:coma} \textbf{using the true} $D^t$
+        \State $\theta \gets \theta + \eta \sum_i A_i
+            \nabla_\theta \log \pi_\theta(r_i)$
+    \EndFor
+\EndFor
+\State \Return $\theta^\star$
+\end{algorithmic}
+\end{algorithm}
+
+\subsection{Complexity Analysis}
+\label{sec:complexity}
+
+Let $D = |\mathcal{K}^t|$ be the number of active demands, $\kappa$ the
+candidate paths per demand, $E$ the number of ISLs, and $\bar{\ell}$ the
+average path length. The gated FlowGNN performs message passing over the
+bipartite graph whose edge count is $O(D\kappa\bar{\ell})$; with $\Lambda$
+layers its cost is $O(\Lambda D \kappa \bar{\ell} d)$ for hidden width $d$.
+The temporal encoder applies a Transformer of length $L$ independently to
+each of the $D\kappa$ path tokens, costing $O(D\kappa L^2 d)$, and the
+per-demand cross-attention over $\kappa$ paths adds $O(D\kappa^2 d)$. Since
+$\kappa$, $L$, $\bar{\ell}$, and $d$ are small constants fixed by design, the
+end-to-end inference cost is \emph{linear} in the number of active demands,
+$O(D)$, and all operations are batched across demands on the GPU.
+Crucially, the parameter count is independent of $D$, $N$, and $E$: the same
+weights apply to any demand set, which is what enables zero-retraining reuse
+(\cref{sec:scaling}). In our configuration the entire model has merely
+4{,}468 trainable parameters --- small enough to be replicated on
+resource-constrained satellite platforms. Demand pruning reduces $D$ from
+$N(N-1)$ to the observed support --- roughly $400\times$ on our
+constellation --- turning an otherwise intractable problem into one solved
+in milliseconds (\cref{sec:runtime}).

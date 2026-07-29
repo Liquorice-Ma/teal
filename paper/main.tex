@@ -1,0 +1,103 @@
+\documentclass[10pt,journal,compsoc]{IEEEtran}
+% TNSE 官方模板走 Computer Society 模式（bare_jrnl_compsoc.tex，IEEEtran V1.8b）
+
+% ==== packages ====
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{algorithm}
+\usepackage{algpseudocode}
+\usepackage{xcolor}
+\usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
+\usepackage{cleveref}
+
+% ==== macros ====
+\newcommand{\sysname}{SiTE\xspace}
+\usepackage{xspace}
+% 审稿修改标记（定稿删除）
+\newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
+% 差异表勾叉符号
+\newcommand{\cmark}{$\checkmark$}
+\newcommand{\xmark}{$\times$}
+% 定理环境（IEEEtran 内置支持）
+\newtheorem{proposition}{Proposition}
+
+\begin{document}
+
+\title{A Glimpse Is Enough: \\ Mask-Aware Sparse-Input Traffic Engineering \\ for LEO Satellite Constellations}
+
+\author{%
+    Linhui~Wei,
+    He~Ma,
+    Yumei~Wang,~\IEEEmembership{Member,~IEEE,}
+    and~Guangteng~Fan%
+    \IEEEcompsocitemizethanks{%
+        \IEEEcompsocthanksitem L. Wei and G. Fan are with the National
+        Innovation Institute of Defense Technology, Academy of Military
+        Science, Beijing, China (e-mail: weilinhui998@163.com;
+        fanguangteng@163.com).%
+        \IEEEcompsocthanksitem H. Ma and Y. Wang are with the School of
+        Artificial Intelligence, Beijing University of Posts and
+        Telecommunications, Beijing, China (e-mail: mahe@bupt.edu.cn;
+        ymwang@bupt.edu.cn).%
+        \IEEEcompsocthanksitem Manuscript received XXX; revised XXX.
+        (Corresponding author: Guangteng Fan.)%
+    }%
+}
+
+\markboth{IEEE Transactions on Network Science and Engineering}%
+{Wei \MakeLowercase{\textit{et al.}}: A Glimpse Is Enough: Mask-Aware Sparse-Input Traffic Engineering for LEO Satellite Constellations}
+
+% compsoc 模式：摘要与关键词包进 title-abstract-index 块
+\IEEEtitleabstractindextext{%
+\begin{abstract}
+Traffic engineering (TE) is a key control primitive for low-Earth-orbit
+(LEO) satellite constellations, whose topologies and traffic change
+continuously as satellites move. Existing learning-based TE systems ---
+for terrestrial and satellite networks alike --- assume that the complete
+traffic matrix is measured and delivered to the controller at every
+decision epoch. This assumption rarely holds in practice: network-wide
+measurement competes with user traffic for scarce onboard resources, and
+the controller typically observes only a sparse subset of demands. We
+present \sysname{}, a learning-based TE system that allocates traffic for
+\emph{all} active demands directly from sparse observations. \sysname{}
+represents unmeasured demands with learnable mask embeddings instead of
+zeros, gates message passing so that placeholders never contaminate
+link-state estimates, and recovers missing information from the recent
+observation history through a Transformer fused with spatial embeddings
+via per-demand cross-attention --- all trained end-to-end against the TE
+objective without an explicit completion stage. Demand pruning and
+size-invariant weights further allow a model trained once to be reused as
+the topology and the active demand set drift, without retraining. On a
+1{,}584-satellite Starlink-like constellation with real traffic dynamics,
+\sysname{} keeps the realized maximum link utilization within
+\todo{XX}\% of the fully-observed optimum with only \todo{XX}\%
+observability, outperforming zero-filling and two-stage
+complete-then-optimize baselines by up to \todo{XX}\%, at \todo{XX}~ms
+inference per snapshot.
+\end{abstract}
+
+\begin{IEEEkeywords}
+Satellite networks, traffic engineering, sparse measurement, graph neural
+networks, reinforcement learning.
+\end{IEEEkeywords}}
+
+\maketitle
+
+\IEEEdisplaynontitleabstractindextext
+\IEEEpeerreviewmaketitle
+
+\input{sections/01-introduction}
+\input{sections/02-related-work}
+\input{sections/03-formulation}
+\input{sections/04-design}
+\input{sections/05-evaluation}
+\input{sections/06-conclusion}
+
+\bibliographystyle{IEEEtran}
+\bibliography{refs}
+
+\end{document}

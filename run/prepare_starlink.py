@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import pickle
+import random
 import sys
 
 import numpy as np
@@ -73,6 +74,40 @@ def convert(size_x, size_y, dataset, capacity, code_dir):
               np.count_nonzero(tms)/tms.size))
 
 
+def perturb(size_x, size_y, drop_percent, seed):
+    """Generate a perturbed topology by dropping a fraction of ISLs.
+    Both directions of an ISL are removed together; strong connectivity
+    is verified so that candidate paths exist for every demand pair.
+    Used for the topology-drift zero-retraining experiment (--test-topo).
+    """
+
+    topo_name = 'Starlink{}{}'.format(size_x, size_y)
+    with open(os.path.join(TOPOLOGIES_DIR, topo_name + '.json')) as f:
+        G = json_graph.node_link_graph(json.load(f))
+
+    undirected = {tuple(sorted((u, v))) for u, v in G.edges}
+    num_drop = int(len(undirected) * drop_percent / 100)
+    rng = random.Random(seed)
+    for attempt in range(20):
+        dropped = rng.sample(sorted(undirected), num_drop)
+        H = G.copy()
+        for u, v in dropped:
+            H.remove_edge(u, v)
+            H.remove_edge(v, u)
+        if nx.is_strongly_connected(H):
+            break
+    else:
+        raise RuntimeError('perturbed topology not strongly connected')
+
+    out_name = '{}Drop{}.json'.format(topo_name, drop_percent)
+    out_fname = os.path.join(TOPOLOGIES_DIR, out_name)
+    with open(out_fname, 'w') as f:
+        json.dump(json_graph.node_link_data(H), f)
+    print('Saved perturbed topology {} ({} nodes, {} edges, '
+          'dropped {} ISLs)'.format(
+              out_fname, H.number_of_nodes(), H.number_of_edges(), num_drop))
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument(
@@ -88,7 +123,18 @@ if __name__ == '__main__':
     parser.add_argument(
         '--code-dir', type=str, default='../code',
         help='directory of the satellite code folder')
+    parser.add_argument(
+        '--drop-isl-percent', type=int, default=0,
+        help='generate a perturbed topology dropping this percent of ISLs '
+             '(requires the base topology json to exist)')
+    parser.add_argument(
+        '--perturb-seed', type=int, default=0,
+        help='random seed for ISL dropping')
     args = parser.parse_args()
 
-    convert(args.size_x, args.size_y, args.dataset,
-            args.capacity, args.code_dir)
+    if args.drop_isl_percent > 0:
+        perturb(args.size_x, args.size_y,
+                args.drop_isl_percent, args.perturb_seed)
+    else:
+        convert(args.size_x, args.size_y, args.dataset,
+                args.capacity, args.code_dir)

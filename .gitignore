@@ -172,3 +172,20 @@ run/*.csv
 
 # macOS
 .DS_Store
+
+# LaTeX build artifacts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.bbl
+paper/*.blg
+paper/*.fls
+paper/*.fdb_latexmk
+paper/*.synctex.gz
+
+# experiment runtime artifacts
+run/logs/
+run/.exp-done
+run/results-summary.csv
+run/lp-oracle-*.csv
+run/result-figs/

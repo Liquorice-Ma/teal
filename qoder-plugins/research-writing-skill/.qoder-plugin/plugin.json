@@ -1,0 +1,15 @@
+{
+  "name": "research-writing-skill",
+  "displayName": "科研写作助手（精选模块）",
+  "version": "0.1.0",
+  "description": "Selected research-writing skills: diagram prompts, reproducible Python figures, pre-submission peer review, and de-AI writing style.",
+  "descriptionZh": "科研写作助手精选四模块：架构图提示词、可复现数据图、投稿前自审、去AI化写作规范。",
+  "author": { "name": "Norman-bury (packaged for Qoder)" },
+  "homepage": "https://github.com/Norman-bury/research-writing-skill",
+  "repository": "https://github.com/Norman-bury/research-writing-skill",
+  "logo": "./assets/avatar.svg",
+  "keywords": ["qoder-plugin", "skill", "research-writing", "paper"],
+  "category": "developer-tools",
+  "tags": ["skill", "writing", "figures", "peer-review"],
+  "skills": "./skills/"
+}
