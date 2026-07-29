@@ -108,28 +108,37 @@ $H^t = (O^{t-L+1}, \ldots, O^t)$.
 \end{figure}
 
 \subsubsection{Problem Statement}
-Sparse-observation TE seeks a policy $\pi$ that maps the observable state to
+A key observation makes decision-making under unknown demands physically
+executable: the decision variables are split \emph{ratios}, not absolute
+volumes. Once installed in the forwarding plane, $r_i$ is applied
+multiplicatively to whatever traffic actually arrives, so a decision for
+demand $i$ requires no knowledge of $d_i$. Sparse-observation TE then
+seeks a policy $\pi$ that maps the observable state to
 split ratios for \emph{all} active demands,
 \begin{equation}
     \{r_i\}_{i \in \mathcal{K}^t} = \pi\left(H^t, M, G^t\right),
     \label{eq:policy}
 \end{equation}
-maximizing the \emph{ground-truth} objective: allocated flow is counted
-against the true demand $d_i$ and the capacity
-constraints~\eqref{eq:capacity}, even though $d_i$ is unknown to $\pi$ for
-unmeasured $i$. Formally,
+maximizing the \emph{ground-truth} objective. Let
+$f_{i,k}(\pi) = \tilde{r}_{i,k} \cdot d_i$ denote the flow actually
+delivered on path $p_{i,k}$, where $\{\tilde{r}_i\}$ are the policy's
+ratios after a feasibility-restoration step that enforces
+\eqref{eq:demand}--\eqref{eq:nonneg} against the true $D^t$ (realized by
+ADMM refinement and rounding in \cref{sec:training}). Formally,
 \begin{equation}
     \max_{\pi} \;
     \mathbb{E}_t \Bigl[ \sum_{i \in \mathcal{K}^t} \sum_{k=1}^{\kappa}
-        f_{i,k}(\pi) \Bigr]
-    \quad \text{s.t.\ \eqref{eq:demand}--\eqref{eq:nonneg} with the true } D^t,
+        f_{i,k}(\pi) \Bigr],
     \label{eq:sparse-obj}
 \end{equation}
-where the expectation is over traffic and topology dynamics. The problem is a
-partially observable sequential decision problem: unlike
-\eqref{eq:obj}--\eqref{eq:nonneg}, the decision variables and the evaluation
-live in different information sets --- the policy sees $O$ and $M$, while
-feasibility and performance are dictated by the hidden $D$.
+where the expectation is over traffic and topology dynamics. The problem
+is a partially observable sequential decision problem: unlike
+\eqref{eq:obj}--\eqref{eq:nonneg}, where the same $D^t$ appears in both
+the decision and the constraints, here the decision variables and the
+evaluation live in different information sets --- the policy acts on
+$(O, M)$ only, while feasibility and performance are settled by the
+hidden $D$. Intuitively, the policy is graded against an exam it never
+gets to read in full.
 
 \subsection{Solution Paradigm}
 \label{sec:paradigm}
