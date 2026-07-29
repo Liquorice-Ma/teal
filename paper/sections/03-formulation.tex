@@ -53,8 +53,26 @@ unserved traffic. Main notations are summarized in \cref{tab:notation}.
 \label{sec:complete-te}
 
 With the complete demand matrix available, TE is the classic path-based
-allocation problem. Using the total satisfied demand as the objective
-(total-flow TE~\cite{teal,ncflow}):
+allocation problem, for which two objectives dominate the literature.
+\emph{Load balancing} minimizes the maximum link utilization (MLU) ---
+the standard objective in satellite TE, where hot ISLs over populated
+regions dictate quality of service~\cite{sate,hu2022,wei2024}:
+\begin{align}
+    \min_{\{r_{i,k}\}} \quad & \theta \label{eq:mlu} \\
+    \text{s.t.} \quad
+        & \frac{1}{c_e}\!\!\sum_{(i,k):\, e \in p_{i,k}}\!\! r_{i,k} d_i
+          \le \theta,
+        && \forall e \in E^t, \label{eq:mlu-cap} \\
+        & \sum_{k=1}^{\kappa} r_{i,k} = 1,
+        && \forall i \in \mathcal{K}^t, \label{eq:conserve} \\
+        & r_{i,k} \ge 0,
+        && \forall i, k, \label{eq:mlu-nonneg}
+\end{align}
+where \eqref{eq:conserve} enforces flow conservation: every demand must
+be fully served, so $\theta$ cannot be lowered by simply withholding
+traffic. \emph{Throughput maximization} instead maximizes the total
+satisfied demand, permitting demands to be served only partially when
+capacity is scarce (total-flow TE~\cite{teal,ncflow}):
 \begin{align}
     \max_{\{f_{i,k}\}} \quad
         & \sum_{i \in \mathcal{K}^t} \sum_{k=1}^{\kappa} f_{i,k}
@@ -67,14 +85,15 @@ allocation problem. Using the total satisfied demand as the objective
         & f_{i,k} \ge 0,
         && \forall i, k. \label{eq:nonneg}
 \end{align}
-Constraint~\eqref{eq:demand} caps allocation at the actual demand, and
-\eqref{eq:capacity} enforces link capacities.
-Problem~\eqref{eq:obj}--\eqref{eq:nonneg} is a linear program solvable to
-optimality, but at constellation scale its solve time far exceeds the control
-epoch~\cite{sate}, and --- more fundamentally for this paper --- both the
-objective through $f_{i,k} = r_{i,k} \cdot d_i$ and
-constraint~\eqref{eq:demand} require knowing $d_i$ for \emph{every} active
-demand.
+Both problems are linear programs solvable to optimality, but at
+constellation scale their solve time far exceeds the control
+epoch~\cite{sate}, and --- more fundamentally for this paper --- the
+link-load terms in \eqref{eq:mlu-cap} and \eqref{eq:capacity}, as well
+as the per-demand cap \eqref{eq:demand}, all require knowing $d_i$ for
+\emph{every} active demand. We treat MLU minimization as the primary
+objective throughout this paper, following the satellite TE literature,
+and report throughput maximization as a secondary instantiation to show
+that our design is objective-agnostic.
 
 \subsection{TE with Sparse Observation}
 \label{sec:sparse-te}
@@ -122,18 +141,31 @@ split ratios for \emph{all} active demands,
 maximizing the \emph{ground-truth} objective. Let
 $f_{i,k}(\pi) = \tilde{r}_{i,k} \cdot d_i$ denote the flow actually
 delivered on path $p_{i,k}$, where $\{\tilde{r}_i\}$ are the policy's
-ratios after a feasibility-restoration step that enforces
-\eqref{eq:demand}--\eqref{eq:nonneg} against the true $D^t$ (realized by
-ADMM refinement and rounding in \cref{sec:training}). Formally,
+ratios after a feasibility-restoration step (needed only for the
+throughput objective, realized by ADMM refinement and rounding in
+\cref{sec:training}; under MLU the ratios are directly feasible by
+\eqref{eq:conserve}). Formally, for MLU minimization
+\begin{equation}
+    \min_{\pi} \;
+    \mathbb{E}_t \Bigl[ \max_{e \in E^t}
+        \frac{1}{c_e}\!\!\sum_{(i,k):\, e \in p_{i,k}}\!\! f_{i,k}(\pi)
+    \Bigr],
+    \label{eq:sparse-mlu}
+\end{equation}
+and, for the throughput variant,
 \begin{equation}
     \max_{\pi} \;
     \mathbb{E}_t \Bigl[ \sum_{i \in \mathcal{K}^t} \sum_{k=1}^{\kappa}
         f_{i,k}(\pi) \Bigr],
     \label{eq:sparse-obj}
 \end{equation}
-where the expectation is over traffic and topology dynamics. The problem
+where the expectations are over traffic and topology dynamics. Note that
+the link loads in \eqref{eq:sparse-mlu} are evaluated with the true
+demands $d_i$: an unmeasured demand still consumes real capacity even
+though the policy could not see it, so misjudging it inflates the
+realized MLU. The problem
 is a partially observable sequential decision problem: unlike
-\eqref{eq:obj}--\eqref{eq:nonneg}, where the same $D^t$ appears in both
+\eqref{eq:mlu}--\eqref{eq:nonneg}, where the same $D^t$ appears in both
 the decision and the constraints, here the decision variables and the
 evaluation live in different information sets --- the policy acts on
 $(O, M)$ only, while feasibility and performance are settled by the
@@ -143,11 +175,14 @@ gets to read in full.
 \subsection{Solution Paradigm}
 \label{sec:paradigm}
 
-Three solution families exist for~\eqref{eq:sparse-obj}.
+Three solution families exist for~\eqref{eq:sparse-mlu}
+and~\eqref{eq:sparse-obj}.
 \emph{Solve-with-zeros} plugs $O$ directly into the
-LP~\eqref{eq:obj}--\eqref{eq:nonneg}, implicitly assuming unmeasured demands
-are zero; it is fast to formulate but structurally starves unmeasured
-traffic. \emph{Two-stage} approaches first estimate $\hat{D}$ from $(H, M)$
+LP~\eqref{eq:mlu}--\eqref{eq:nonneg}, implicitly assuming unmeasured
+demands are zero; the resulting policy leaves no headroom on the links
+that unmeasured traffic actually traverses, so the realized MLU can be far
+above the optimum (and, under the throughput objective, unmeasured
+demands are structurally starved). \emph{Two-stage} approaches first estimate $\hat{D}$ from $(H, M)$
 --- via interpolation, tensor completion, or compressive
 sensing~\cite{vardi1996,zhang2003,zhang2009} --- then
 solve the LP on $\hat{D}$; estimation is optimized for reconstruction error,
@@ -160,7 +195,9 @@ against the TE objective,
     \mathbb{E} \bigl[ R\bigl(\pi_\theta(H, M, G),\, D\bigr) \bigr],
     \label{eq:rl-obj}
 \end{equation}
-where $R$ is the total satisfied demand computed on the true $D$. Since $R$
+where $R$ is the TE objective evaluated on the true $D$ --- negative
+realized MLU for~\eqref{eq:sparse-mlu}, or total satisfied demand
+for~\eqref{eq:sparse-obj}. Since $R$
 is non-differentiable through the capacity-constrained network and the true
 $D$ is available only as a training-time signal, we
 optimize~\eqref{eq:rl-obj} with multi-agent reinforcement learning --- each

@@ -32,8 +32,11 @@ due to intermittent ground contacts and equipment degradation are the norm
 rather than the exception. In practice, the controller observes only a
 \emph{sparse} traffic matrix --- a subset of demands measured at each
 epoch. Naive workarounds fall short on both ends: filling unobserved
-entries with zeros systematically misleads the allocator into starving
-unmeasured demands, while two-stage ``complete-then-optimize'' pipelines
+entries with zeros misleads the allocator --- it leaves no headroom on
+the links that unmeasured traffic actually traverses, inflating the
+realized maximum link utilization (MLU), and under throughput objectives
+it systematically starves unmeasured demands --- while two-stage
+``complete-then-optimize'' pipelines
 propagate reconstruction errors into allocation decisions. The
 state-of-the-art sparse-TE approach~\cite{test} fills unobserved entries
 with zeros and compensates with synthetic training augmentation, but it
@@ -100,9 +103,10 @@ In summary, this paper makes the following contributions:
     train-once, zero-retraining deployment across topology snapshots and
     drifting demand sets (\cref{sec:design,sec:eval}).
     \item On a 1{,}584-satellite Starlink-like constellation with real
-    topology dynamics, \sysname{} achieves \todo{XX}\% of the
-    fully-observed performance with only \todo{XX}\% observability,
-    outperforming zero-filling and two-stage baselines by
-    \todo{XX--XX}\%, with \todo{XX}~ms inference per snapshot
-    (\cref{sec:eval}).
+    topology dynamics, \sysname{} keeps the realized MLU within
+    \todo{XX}\% of the fully-observed optimum with only \todo{XX}\%
+    observability --- and retains \todo{XX}\% of the optimum under the
+    throughput objective --- outperforming zero-filling and two-stage
+    baselines by \todo{XX--XX}\%, with \todo{XX}~ms inference per
+    snapshot (\cref{sec:eval}).
 \end{itemize}

@@ -13,8 +13,10 @@ cross-attention --- all trained end-to-end against the TE objective without
 an explicit completion stage. Demand pruning and size-invariant weights let
 a model trained once serve drifting topologies and demand sets with zero
 retraining. On a 1{,}584-satellite Starlink-like constellation with real
-traffic dynamics, \sysname{} achieves \todo{XX}\% of fully-observed
-performance with only \todo{XX}\% observability, outperforming zero-filling
+traffic dynamics, \sysname{} keeps the realized maximum link utilization
+within \todo{XX}\% of the fully-observed optimum with only \todo{XX}\%
+observability --- and retains \todo{XX}\% of the optimum under the
+throughput objective --- outperforming zero-filling
 and two-stage baselines by \todo{XX--XX}\%, at \todo{XX}~ms inference per
 snapshot.
 

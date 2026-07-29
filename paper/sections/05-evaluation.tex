@@ -112,10 +112,18 @@ than those over oceans, which is what makes demand pruning
     \label{fig:traffic-char}
 \end{figure}
 
-\textbf{Metrics and baselines.} We report the \emph{satisfied demand
-ratio} (allocated flow after ADMM and rounding, evaluated against
-ground-truth demands, over total demand) and per-snapshot inference
-latency, averaged over three seeds (mean~$\pm$~std). Following the
+\textbf{Metrics and baselines.} Our primary metric is the
+\emph{realized MLU}, evaluated against ground-truth demands. Following
+TEST~\cite{test}, we report it as the normalized performance ratio
+$PR = U / U_{\mathrm{opt}}$, where $U_{\mathrm{opt}}$ is the optimal MLU
+obtained by solving the LP~\eqref{eq:mlu}--\eqref{eq:mlu-nonneg} on the
+true traffic matrix ($PR \ge 1$, lower is better); MLU alone can be gamed
+by under-serving traffic, which our flow-conservation
+formulation~\eqref{eq:conserve} rules out by construction. As the
+secondary objective we report the \emph{satisfied demand ratio}
+(allocated flow after ADMM and rounding over total demand). Both metrics
+and per-snapshot inference latency are averaged over three seeds
+(mean~$\pm$~std). Following the
 taxonomy of \cref{sec:paradigm}, we compare against \emph{Zero-fill}
 (unobserved entries set to zero, no mask-aware modules), \emph{Mean-interp.}
 (two-stage complete-then-optimize), and \emph{Teal-full} (original Teal with

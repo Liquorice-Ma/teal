@@ -239,9 +239,11 @@ retain reward-driven RL rather than imitation learning~\cite{fnc}:
 imitation learning requires expert allocations solved from \emph{fully
 realized} demands of each episode, a supervision signal that is unavailable
 when even post-hoc observation is sparse; RL needs only the reward, which
-the network itself provides. At inference, allocations are refined by two
-parallelizable ADMM~\cite{boyd2011} iterations to repair residual
-violations of the
+the network itself provides. At inference, the MLU objective requires no
+repair --- the pure-softmax ratios satisfy flow
+conservation~\eqref{eq:conserve} by construction --- while under the
+throughput objective allocations are refined by two parallelizable
+ADMM~\cite{boyd2011} iterations to repair residual violations of the
 capacity constraint~\eqref{eq:capacity}, adding less than 1~ms.
 
 \begin{algorithm}[t]
