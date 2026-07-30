@@ -80,6 +80,8 @@ class Teal():
             # early stop
             if self.early_stop:
                 self.val()
+                print('epoch {} val_obj {:.6f}'.format(
+                    epoch, self.val_reward[-1]), flush=True)
                 if len(self.val_reward) > 20 and abs(
                         sum(self.val_reward[-20:-10])/10
                         - sum(self.val_reward[-10:])/10) < 0.0001:
