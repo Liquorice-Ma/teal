@@ -33,6 +33,9 @@ class Teal():
 
         # init optimizer
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
+        # cosine decay to lr/10: the MLU reward needs a large initial lr
+        # to make progress, but oscillates without annealing
+        self.actor_scheduler = None
 
         # early stop when val result no longer changes
         self.early_stop = early_stop
@@ -52,6 +55,11 @@ class Teal():
         """
 
         for epoch in range(num_epoch):
+
+            if self.actor_scheduler is None:
+                self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(
+                    self.actor_optimizer, T_max=num_epoch,
+                    eta_min=self.actor_optimizer.param_groups[0]['lr'] * 0.1)
 
             self.env.reset('train')
             # reload graph in case the demand set was rebuilt (demand_split)
@@ -80,6 +88,7 @@ class Teal():
                 loss.backward()
                 self.actor_optimizer.step()
                 # break
+            self.actor_scheduler.step()
 
             # early stop
             if self.early_stop:

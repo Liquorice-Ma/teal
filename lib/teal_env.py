@@ -28,6 +28,7 @@ class TealEnv(object):
             obs_ratio=1.0, obs_type='flow', obs_sample='uniform',
             hist_len=1, prune_demands=False,
             demand_split=False, test_topo=None,
+            num_reward_edge=1, reward_temperature=0.01,
             raw_action_min=-10.0, raw_action_max=10.0):
         """Initialize Teal environment.
 
@@ -59,6 +60,10 @@ class TealEnv(object):
             test_topo: alternative topology json used at test time only;
                 the graph, paths and ADMM are rebuilt while model weights
                 stay unchanged (topology-drift zero-retraining)
+            num_reward_edge: number of most-congested links that receive
+                credit in the MLU reward (1 recovers the original argmax)
+            reward_temperature: softmax temperature over the top-k link
+                utilizations when num_reward_edge > 1
             raw_action_min: min value when clamp raw action
             raw_action_max: max value when clamp raw action
         """
@@ -81,6 +86,12 @@ class TealEnv(object):
         self.obs_type = obs_type
         self.obs_sample = obs_sample
         self.hist_len = hist_len
+
+        # softened-max reward for the MLU objective: number of congested
+        # links that receive credit, and the softmax temperature over their
+        # utilizations (temperature -> 0 recovers the plain argmax)
+        self.num_reward_edge = num_reward_edge
+        self.reward_temperature = reward_temperature
 
         # init matrices related to topology; topo_active tracks the graph
         # currently loaded (training topo, or test_topo during testing)
@@ -350,6 +361,10 @@ class TealEnv(object):
                 # total flow require no constraint violation
                 action = self.ADMM.tune_action(self.obs, action, num_admm_step)
                 action = self.round_action(action)
+            elif self.obj == 'min_max_link_util' and num_admm_step > 0:
+                # conservation-preserving rebalancing (cf. rebalance_action)
+                action = self.rebalance_action(
+                    action, num_iter=10*num_admm_step)
             info['runtime'] = time.time() - start_time
             info['sol_mat'] = self.extract_sol_mat(action)
             reward = self.get_obj(action)
@@ -357,6 +372,45 @@ class TealEnv(object):
         # next observation
         self._next_obs()
         return reward, info
+
+    def rebalance_action(self, action, num_iter=20, step=0.5):
+        """Return rebalanced action for the MLU objective.
+
+        Conservation-preserving repair: iteratively moves a fraction of
+        flow from each demand's most congested path (by bottleneck link
+        utilization) to its least congested one. Per-demand totals stay
+        unchanged, so MLU cannot be lowered by under-serving traffic ---
+        unlike ADMM, whose slack on the demand constraint drops flow.
+
+        Args:
+            action: path flows (num_path_node)
+            num_iter: number of rebalancing iterations
+            step: fraction of the donor path's flow moved per iteration
+        """
+
+        capacity = self.obs[:-self.num_path_node]
+        num_demand = self.num_path_node//self.num_path
+        idx = torch.arange(num_demand).to(self.device)
+        for _ in range(num_iter):
+            edge_flow = torch_scatter.scatter(
+                action[self.p2e[0]], self.p2e[1],
+                dim_size=self.num_edge_node)
+            util = edge_flow/capacity
+            # bottleneck utilization of each path
+            path_util = torch_scatter.scatter_max(
+                util[self.p2e[1]], self.p2e[0],
+                dim_size=self.num_path_node)[0].reshape(-1, self.num_path)
+            donor = path_util.argmax(-1)
+            receiver = path_util.argmin(-1)
+            # move only when it strictly improves the demand's bottleneck
+            gain = path_util[idx, donor] - path_util[idx, receiver] > 1e-6
+            donor = idx*self.num_path + donor
+            receiver = idx*self.num_path + receiver
+            move = step*action[donor]*gain
+            action = action.clone()
+            action[donor] -= move
+            action[receiver] += move
+        return action
 
     def get_obj(self, action):
         """Return objective."""
@@ -516,13 +570,25 @@ class TealEnv(object):
 
         elif self.obj == 'min_max_link_util':
 
-            # find link with max utilization
-            max_util_edge = util.argmax()
+            # softened max: spread credit over the top-k most congested links
+            # instead of the single argmax. With one link only, the gradient
+            # reaches a handful of demands and the bottleneck jumps between
+            # steps, making the signal extremely noisy; weighting the top-k
+            # links by a softmax over their utilization keeps the objective
+            # aligned with MLU while giving many more demands a useful
+            # gradient direction.
+            k = min(self.num_reward_edge, util.numel())
+            top_util, top_edge = torch.topk(util, k)
+            weight = torch.softmax(top_util/self.reward_temperature, dim=0)
 
-            # prepare paths related to max_util_edge
-            max_util_paths = torch.zeros(self.num_path_node).to(self.device)
-            max_util_paths[self.p2e[0, self.p2e[1] == max_util_edge]] =\
-                1/self.obs[max_util_edge]
+            # per-path coefficient: sum over the top-k links it traverses,
+            # each scaled by its weight and inverse capacity
+            edge_coef = torch.zeros(self.num_edge_node).to(self.device)
+            edge_coef[top_edge] = weight/self.obs[:-self.num_path_node][
+                top_edge]
+            max_util_paths = torch_scatter.scatter(
+                edge_coef[self.p2e[1]], self.p2e[0],
+                dim_size=self.num_path_node)
 
             # sample raw_actions and change each node pair at a time for reward
             for _ in range(num_sample):

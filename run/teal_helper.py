@@ -202,6 +202,15 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         '--samples', type=int, default=5,
         help='number of COMA samples')
     parser.add_argument(
+        '--reward-edges', type=int, default=1,
+        help='number of most-congested links credited in the MLU reward; '
+             '1 is the original single-bottleneck reward, larger values '
+             'soften the max and reduce gradient variance')
+    parser.add_argument(
+        '--reward-temperature', type=float, default=0.01,
+        help='softmax temperature over top-k link utilizations when '
+             '--reward-edges > 1')
+    parser.add_argument(
         '--admm-steps', type=int, default=5,
         help='number of ADMM steps')
     parser.add_argument(
