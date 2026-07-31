@@ -3,6 +3,7 @@ import time
 import json
 import sys
 import os
+from copy import deepcopy
 from tqdm import tqdm
 from networkx.readwrite import json_graph
 
@@ -35,6 +36,9 @@ class Teal():
 
         # early stop when val result no longer changes
         self.early_stop = early_stop
+        # best validation objective seen so far (for model checkpointing)
+        self.best_val = None
+        self.best_state = None
         if self.early_stop:
             self.val_reward = []
 
@@ -82,11 +86,31 @@ class Teal():
                 self.val()
                 print('epoch {} val_obj {:.6f}'.format(
                     epoch, self.val_reward[-1]), flush=True)
+                # keep the best-validation weights: the objective oscillates
+                # under the high learning rates needed for the MLU reward,
+                # so the final epoch is not necessarily the best model
+                if self._is_best(self.val_reward[-1]):
+                    self.best_val = self.val_reward[-1]
+                    self.best_state = deepcopy(self.actor.state_dict())
                 if len(self.val_reward) > 20 and abs(
                         sum(self.val_reward[-20:-10])/10
                         - sum(self.val_reward[-10:])/10) < 0.0001:
                     break
+        if self.best_state is not None:
+            print('best val_obj {:.6f}'.format(self.best_val), flush=True)
+            self.actor.load_state_dict(self.best_state)
         self.actor.save_model()
+
+    def _is_best(self, val):
+        """Return whether val improves on the best seen validation result.
+
+        Lower is better for min_max_link_util, higher for total_flow.
+        """
+
+        if self.best_val is None:
+            return True
+        return val < self.best_val \
+            if self.env.obj == 'min_max_link_util' else val > self.best_val
 
     def val(self):
         """Validating Teal model."""
