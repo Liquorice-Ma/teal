@@ -41,6 +41,8 @@ OUTPUT_CSV_TEMPLATE = "teal-{}-{}.csv"
 def benchmark(problems, output_csv, arg):
 
     num_path, edge_disjoint, dist_metric = PATH_FORM_HYPERPARAMS
+    num_path = args.num_path
+    edge_disjoint = not args.shared_paths
     obj, topo = args.obj, args.topo
     model_save = args.model_save
     device = torch.device(
@@ -51,6 +53,13 @@ def benchmark(problems, output_csv, arg):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+    if args.deterministic:
+        # remove GPU atomic-scatter non-determinism: the method gap on this
+        # problem is 2-3% while unconstrained runs vary by ~5%, so the seed
+        # noise must be suppressed to make the gap measurable
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.use_deterministic_algorithms(True, warn_only=True)
 
     # ========== load hyperparameters
     # env hyper-parameters
@@ -110,6 +119,7 @@ def benchmark(problems, output_csv, arg):
         model_save=model_save,
         device=device,
         mask_mode=mask_mode,
+        mask_init=args.mask_init,
         gate=gate)
     teal = Teal(
         teal_env=teal_env,

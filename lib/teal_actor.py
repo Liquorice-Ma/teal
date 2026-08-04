@@ -18,7 +18,7 @@ class TealActor(nn.Module):
 
     def __init__(
             self, teal_env, num_layer, model_dir, model_save, device,
-            mask_mode='embed', gate=True,
+            mask_mode='embed', gate=True, mask_init=57.0,
             std=1, log_std_min=-10.0, log_std_max=10.0):
         """Initialize teal actor.
 
@@ -49,9 +49,18 @@ class TealActor(nn.Module):
         self.FlowGNN = FlowGNN(self.env, num_layer, gate=gate).to(self.device)
 
         # learnable mask embedding for unobserved demands
-        # replace masked-out entries instead of filling them with 0
+        # replace masked-out entries instead of filling them with 0.
+        # Must start away from zero: with a zeros init the embed branch is
+        # numerically identical to mask_mode='zero', which silently turns
+        # the ablation into a no-op. The scale matters too --- an init far
+        # below the demand distribution is indistinguishable from zeros in
+        # the model input. mask_init defaults to the median nonzero demand
+        # of the trace (~57 Mbps on Starlink), which sits well below the
+        # arithmetic mean (~159, used by the mean-interpolation baseline)
+        # because the demand distribution is heavy-tailed.
         self.mask_embedding = nn.Parameter(
-            torch.zeros(self.num_path, device=self.device))
+            mask_init*(0.75 + 0.5*torch.rand(
+                self.num_path, device=self.device)))
 
         # temporal module enabled when hist_len > 1:
         # transformer over historical sparse traffic matrices, fused with

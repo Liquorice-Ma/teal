@@ -147,6 +147,27 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
              'pairs; node-level samples source nodes whose outgoing '
              'demands are all observed')
     parser.add_argument(
+        '--mask-init', type=float, default=57.0,
+        help='initial scale of the learnable mask embedding; default is '
+             'the median nonzero demand of the Starlink trace. Must stay '
+             'within the demand distribution: values near zero make the '
+             'embed mode identical to zero-filling, while the arithmetic '
+             'mean over-estimates on heavy-tailed traffic')
+    parser.add_argument(
+        '--deterministic', action='store_true',
+        help='force deterministic GPU algorithms to remove run-to-run '
+             'variance (slower, but needed when the method gap is smaller '
+             'than the seed noise)')
+    parser.add_argument(
+        '--num-path', type=int, default=4,
+        help='number of candidate paths per demand')
+    parser.add_argument(
+        '--shared-paths', action='store_true',
+        help='use k-shortest paths that may share links instead of '
+             'edge-disjoint ones. Edge-disjoint path sets leave nothing '
+             'for the policy to decide (their paths never contend for the '
+             'same link), so uniform splitting is already near-optimal')
+    parser.add_argument(
         '--obs-sample', type=str, default='uniform',
         choices=['uniform', 'top'],
         help='flow-level sampling strategy: uniform random, or top '
