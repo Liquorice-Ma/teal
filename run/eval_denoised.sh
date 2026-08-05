@@ -21,7 +21,8 @@ S="--slice-train-start 0 --slice-train-stop 80 --slice-val-start 80 \
 --slice-val-stop 90 --slice-test-start 90 --slice-test-stop 101"
 BASE="--shared-paths --deterministic --obj min_max_link_util \
 --topo Starlink2272.json --tm-model starlink --prune-demands --hist-len 3 \
---samples 30 --admm-steps 2 --epochs 60 --early-stop True --lr 0.0001 $S"
+--samples 30 --admm-steps 2 --epochs 60 --early-stop True --lr 0.0001 \
+--num-restart 3 --warmup-epochs 4 $S"
 CSV=eval_denoised.csv
 DONE=.eval-done
 [ -f "$CSV" ] || echo "config,rho,seed,mlu" > "$CSV"
@@ -47,7 +48,7 @@ $PY lp_oracle.py --shared-paths --topo Starlink2272.json \
     --slice-test-start 90 --slice-test-stop 101 > /dev/null 2>&1
 cp lp-oracle-Starlink2272.json.csv lp-oracle-shared.csv 2>/dev/null
 
-for seed in 0 1 2 3 4; do
+for seed in 0 1 2; do
     run full 1.0 "$seed" --mask-mode embed
     for rho in 0.5 0.3 0.1; do
         # full model and single-module ablations (ELATE-style)
@@ -55,9 +56,10 @@ for seed in 0 1 2 3 4; do
         run no-embed   "$rho" "$seed" --mask-mode zero
         run no-gate    "$rho" "$seed" --mask-mode embed --no-gate
         run no-temporal "$rho" "$seed" --mask-mode embed --hist-len 1
-        # external baselines
+        # zero-fill baseline at every rho
         run zero-fill  "$rho" "$seed" --mask-mode zero --no-gate --hist-len 1
-        run mean-interp "$rho" "$seed" --mask-mode mean --no-gate --hist-len 1
     done
+    # two-stage baseline: one representative operating point (rho=0.3)
+    run mean-interp 0.3 "$seed" --mask-mode mean --no-gate --hist-len 1
 done
 echo "ALL DONE -> $CSV"

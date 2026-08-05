@@ -61,6 +61,7 @@ class TealActor(nn.Module):
         self.mask_embedding = nn.Parameter(
             mask_init*(0.75 + 0.5*torch.rand(
                 self.num_path, device=self.device)))
+        self.mask_init = mask_init
 
         # temporal module enabled when hist_len > 1:
         # transformer over historical sparse traffic matrices, fused with
@@ -110,6 +111,26 @@ class TealActor(nn.Module):
                 topo, num_layer, std < 0,
                 self.env.obs_type, self.env.obs_ratio, self.env.hist_len,
                 self.mask_mode, self.FlowGNN.gate))
+
+    def reinit_parameters(self):
+        """Re-initialize every learnable parameter.
+
+        Used for multi-restart initialization selection: on this problem a
+        substantial fraction of random inits get stuck in a bad region
+        (observed validation objectives of 2.4-3.2 against a normal 1.5),
+        and such a run is unusable. reset_parameters() covers the standard
+        torch modules (Linear, LayerNorm, MultiheadAttention), while the
+        mask embedding is redrawn explicitly since it is a bare Parameter.
+        """
+
+        for module in self.modules():
+            if module is not self and hasattr(module, 'reset_parameters'):
+                module.reset_parameters()
+        self.apply(weight_initialization)
+        with torch.no_grad():
+            self.mask_embedding.copy_(
+                self.mask_init*(0.75 + 0.5*torch.rand_like(
+                    self.mask_embedding)))
 
     def load_model(self):
         """Load from model fname."""

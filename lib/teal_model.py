@@ -32,6 +32,7 @@ class Teal():
         self.actor = teal_actor
 
         # init optimizer
+        self.base_lr = lr
         self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
         # cosine decay to lr/10: the MLU reward needs a large initial lr
         # to make progress, but oscillates without annealing
@@ -42,23 +43,78 @@ class Teal():
         # best validation objective seen so far (for model checkpointing)
         self.best_val = None
         self.best_state = None
-        if self.early_stop:
-            self.val_reward = []
+        # always available: restart screening validates regardless of
+        # whether early stopping is enabled
+        self.val_reward = []
 
-    def train(self, num_epoch, batch_size, num_sample):
+    def train(self, num_epoch, batch_size, num_sample,
+              num_restart=1, warmup_epoch=5):
         """Train Teal model.
 
         Args:
             num_epoch: number of training epoch
             batch_size: batch size
             num_sample: number of samples in COMA reward
+            num_restart: number of candidate initializations to screen
+            warmup_epoch: epochs per candidate during screening
         """
+
+        if num_restart > 1:
+            self._select_init(
+                num_restart, warmup_epoch, batch_size, num_sample)
+        self._run_epochs(num_epoch, batch_size, num_sample, track_best=True)
+        if self.best_state is not None:
+            print('best val_obj {:.6f}'.format(self.best_val), flush=True)
+            self.actor.load_state_dict(self.best_state)
+        self.actor.save_model()
+
+    def _select_init(self, num_restart, warmup_epoch, batch_size, num_sample):
+        """Briefly train several random inits and keep the best one.
+
+        A sizable fraction of random initializations never escape a bad
+        region on this problem (validation objectives of 2.4-3.2 versus a
+        normal 1.5), which makes individual runs unusable. Screening is done
+        purely on the validation slice, so the test slice stays untouched.
+        """
+
+        best_state, best_val = None, None
+        for restart in range(num_restart):
+            if restart > 0:
+                self.actor.reinit_parameters()
+            self._reset_optimizer()
+            self.val_reward = []
+            self._run_epochs(
+                warmup_epoch, batch_size, num_sample, track_best=False,
+                desc='Warmup {}'.format(restart))
+            self.val()
+            val = self.val_reward[-1]
+            print('restart {} warmup val_obj {:.6f}'.format(restart, val),
+                  flush=True)
+            if best_val is None or self._better(val, best_val):
+                best_val, best_state = val, deepcopy(self.actor.state_dict())
+        print('selected init, warmup val_obj {:.6f}'.format(best_val),
+              flush=True)
+        self.actor.load_state_dict(best_state)
+        self._reset_optimizer()
+        self.val_reward = []
+        self.best_val, self.best_state = None, None
+
+    def _reset_optimizer(self):
+        """Fresh optimizer and scheduler (used between restarts)."""
+
+        self.actor_optimizer = optim.Adam(
+            self.actor.parameters(), lr=self.base_lr)
+        self.actor_scheduler = None
+
+    def _run_epochs(self, num_epoch, batch_size, num_sample,
+                    track_best=True, desc='Training epoch'):
+        """Run num_epoch training epochs."""
 
         for epoch in range(num_epoch):
 
             if self.actor_scheduler is None:
                 self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(
-                    self.actor_optimizer, T_max=num_epoch,
+                    self.actor_optimizer, T_max=max(num_epoch, 1),
                     eta_min=self.actor_optimizer.param_groups[0]['lr'] * 0.1)
 
             self.env.reset('train')
@@ -68,7 +124,7 @@ class Teal():
             ids = range(self.env.idx_start, self.env.idx_stop)
             loop_obj = tqdm(
                 [ids[i:i+batch_size] for i in range(0, len(ids), batch_size)],
-                desc=f"Training epoch {epoch}/{num_epoch}: ")
+                desc=f"{desc} {epoch}/{num_epoch}: ")
 
             for idx in loop_obj:
                 loss = 0
@@ -91,7 +147,7 @@ class Teal():
             self.actor_scheduler.step()
 
             # early stop
-            if self.early_stop:
+            if track_best and self.early_stop:
                 self.val()
                 print('epoch {} val_obj {:.6f}'.format(
                     epoch, self.val_reward[-1]), flush=True)
@@ -105,10 +161,12 @@ class Teal():
                         sum(self.val_reward[-20:-10])/10
                         - sum(self.val_reward[-10:])/10) < 0.0001:
                     break
-        if self.best_state is not None:
-            print('best val_obj {:.6f}'.format(self.best_val), flush=True)
-            self.actor.load_state_dict(self.best_state)
-        self.actor.save_model()
+
+    def _better(self, val, reference):
+        """Return whether val beats reference for the current objective."""
+
+        return val < reference \
+            if self.env.obj == 'min_max_link_util' else val > reference
 
     def _is_best(self, val):
         """Return whether val improves on the best seen validation result.

@@ -232,6 +232,14 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         help='softmax temperature over top-k link utilizations when '
              '--reward-edges > 1')
     parser.add_argument(
+        '--num-restart', type=int, default=1,
+        help='number of candidate initializations screened on the '
+             'validation slice before full training; a sizable fraction of '
+             'random inits never escape a bad region on this problem')
+    parser.add_argument(
+        '--warmup-epochs', type=int, default=5,
+        help='epochs per candidate during initialization screening')
+    parser.add_argument(
         '--admm-steps', type=int, default=5,
         help='number of ADMM steps')
     parser.add_argument(

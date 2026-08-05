@@ -131,7 +131,9 @@ def benchmark(problems, output_csv, arg):
     teal.train(
         num_epoch=num_epoch,
         batch_size=batch_size,
-        num_sample=num_sample)
+        num_sample=num_sample,
+        num_restart=args.num_restart,
+        warmup_epoch=args.warmup_epochs)
     teal.test(
         num_admm_step=num_admm_step,
         output_header=HEADERS,
