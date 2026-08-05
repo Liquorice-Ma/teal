@@ -62,6 +62,15 @@ class TealActor(nn.Module):
             mask_init*(0.75 + 0.5*torch.rand(
                 self.num_path, device=self.device)))
         self.mask_init = mask_init
+        # learnable scale for the neighbor-aware fill (mask_mode='nbr').
+        # The neighbor mean sits at the arithmetic-mean scale (~159 Mbps on
+        # Starlink), which the init sweep showed to over-estimate; the best
+        # fill magnitude was the median (~57). Starting at 57/159 ~= 0.36
+        # keeps the per-demand relative differences --- the reason to use
+        # neighbors at all --- while placing the absolute level at the
+        # measured optimum.
+        self.mask_scale = nn.Parameter(
+            torch.full((1,), 0.36, device=self.device))
 
         # temporal module enabled when hist_len > 1:
         # transformer over historical sparse traffic matrices, fused with
@@ -131,6 +140,7 @@ class TealActor(nn.Module):
             self.mask_embedding.copy_(
                 self.mask_init*(0.75 + 0.5*torch.rand_like(
                     self.mask_embedding)))
+            self.mask_scale.fill_(0.36)
 
     def load_model(self):
         """Load from model fname."""
@@ -216,6 +226,14 @@ class TealActor(nn.Module):
             tm = tm + \
                 self.mask_embedding.repeat(
                     self.env.num_path_node//self.num_path) * (1 - path_mask)
+        elif self.mask_mode == 'nbr':
+            # neighbor-aware fill: per-demand estimate from observed demands
+            # sharing the same source, scaled by a learnable factor. Unlike
+            # 'embed', the fill differs across demands and therefore carries
+            # information the policy can act on.
+            est = self.env.neighbor_estimate(tm[::self.num_path])
+            tm = tm + (self.mask_scale*est).repeat_interleave(
+                self.num_path) * (1 - path_mask)
         elif self.mask_mode == 'mean':
             # mean interpolation: two-stage complete-then-optimize baseline
             tm = tm + tm.sum()/path_mask.sum() * (1 - path_mask)

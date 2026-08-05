@@ -183,10 +183,13 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
              'traffic matrix (for sparse satellite traffic)')
     parser.add_argument(
         '--mask-mode', type=str, default='embed',
-        choices=['embed', 'zero', 'mean'],
-        help='how to fill unobserved demands: learnable mask embedding, '
-             'zero filling, or mean interpolation over observed demands '
-             '(two-stage complete-then-optimize baseline)')
+        choices=['embed', 'nbr', 'zero', 'mean'],
+        help='how to fill unobserved demands: a learnable placeholder '
+             'shared by all of them (embed), a per-demand estimate from '
+             'observed demands sharing the same source scaled by a '
+             'learnable factor (nbr), zero filling, or mean interpolation '
+             'over observed demands (two-stage complete-then-optimize '
+             'baseline)')
     parser.add_argument(
         '--no-gate', dest='no_gate', default=False, action='store_true',
         help='disable mask-aware gating in FlowGNN (ablation baseline)')
