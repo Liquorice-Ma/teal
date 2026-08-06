@@ -50,7 +50,7 @@ print('=== %s by observability and config (median / P90) ===' % name)
 print('%-6s %-12s %-9s %-9s %s' % ('rho', 'config', 'median', 'P90', 'n'))
 for rho in sorted(df.rho.unique(), reverse=True):
     for cfg in ['ours', 'no-embed', 'no-gate', 'no-temporal',
-                'zero-fill', 'mean-interp', 'full']:
+                'nbr', 'zero-fill', 'mean-interp', 'full']:
         sub = df[(df.rho == rho) & (df.config == cfg)]
         if sub.empty:
             continue
@@ -73,15 +73,54 @@ for rho in sorted([r for r in df.rho.unique() if r < 1.0], reverse=True):
     if o.empty:
         continue
     om = np.median(o[metric])
-    row = ['rho=%.1f ours=%.3f' % (rho, om)]
+    print('  rho=%-5s ours=%.3f' % (rho, om))
     for cfg in ['no-embed', 'no-gate', 'no-temporal',
                 'zero-fill', 'mean-interp']:
         sub = df[(df.rho == rho) & (df.config == cfg)]
         if sub.empty:
             continue
         gap = (np.median(sub[metric]) - om)/om*100
-        row.append('%s %+.1f%%' % (cfg, gap))
-    print('  ' + ' | '.join(row))
+        print('            %-12s %+.1f%%' % (cfg, gap))
+
+
+# ---- imputation-strategy view: does filling values help at all? ----
+# The comparison must hold the structural modules fixed. no-embed keeps the
+# gate and the temporal encoder and only drops the embedding, whereas
+# zero-fill also removes both modules, so the two are not a clean
+# fill-strategy pair.
+print('\n=== fill strategy at fixed structure (median %s) ===' % name)
+print('%-6s %-18s %-9s %s' % ('rho', 'fill', 'median', 'vs zero fill'))
+for rho in sorted([r for r in df.rho.unique() if r < 1.0], reverse=True):
+    for label, group in [
+            ('WITH gate+temporal',
+             [('zero', 'no-embed'), ('learned-placeholder', 'ours'),
+              ('neighbor-est', 'nbr'), ('global-mean', 'mean-gated')]),
+            ('WITHOUT gate+temporal',
+             [('zero', 'zero-fill'), ('global-mean', 'mean-interp')])]:
+        ref = df[(df.rho == rho) & (df.config == group[0][1])]
+        if ref.empty:
+            continue
+        refm = np.median(ref[metric])
+        print('%-6s [%s]' % (rho, label))
+        for fill, cfg in group:
+            sub = df[(df.rho == rho) & (df.config == cfg)]
+            if sub.empty:
+                continue
+            val = np.median(sub[metric])
+            delta = '' if cfg == group[0][1] \
+                else '%+.1f%%' % ((val - refm)/refm*100)
+            print('       %-18s %-9.3f %s' % (fill, val, delta))
+
+# ---- structural contribution: same fill (zero), modules on vs off ----
+print('\n=== structural contribution (zero fill in both arms) ===')
+for rho in sorted([r for r in df.rho.unique() if r < 1.0], reverse=True):
+    a = df[(df.rho == rho) & (df.config == 'no-embed')]
+    b = df[(df.rho == rho) & (df.config == 'zero-fill')]
+    if a.empty or b.empty:
+        continue
+    am, bm = np.median(a[metric]), np.median(b[metric])
+    print('  rho=%-5s with modules %.3f vs without %.3f  (%+.1f%%)'
+          % (rho, am, bm, (bm - am)/am*100))
 
 # ---- degradation vs full observation (LMTE style) ----
 full = df[df.config == 'full']
