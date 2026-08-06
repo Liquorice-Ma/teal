@@ -270,16 +270,23 @@ class TealEnv(object):
         """
 
         num_node = self.G.number_of_nodes()
+        # demand_src stays on CPU because it indexes CPU tensors when reading
+        # traffic matrices; scatter needs it on the compute device
+        if getattr(self, '_src_dev', None) is None \
+                or self._src_dev.device != tm_demand.device \
+                or self._src_dev.numel() != tm_demand.numel():
+            self._src_dev = self.demand_src.to(tm_demand.device)
+        src_idx = self._src_dev
         observed = tm_demand * self.obs_mask
         src_sum = torch_scatter.scatter(
-            observed, self.demand_src, dim_size=num_node)
+            observed, src_idx, dim_size=num_node)
         src_cnt = torch_scatter.scatter(
-            self.obs_mask, self.demand_src, dim_size=num_node)
+            self.obs_mask, src_idx, dim_size=num_node)
         src_mean = src_sum/src_cnt.clamp(min=1)
-        est = src_mean[self.demand_src]
+        est = src_mean[src_idx]
         global_mean = observed.sum()/self.obs_mask.sum().clamp(min=1)
         return torch.where(
-            src_cnt[self.demand_src] > 0, est, global_mean)
+            src_cnt[src_idx] > 0, est, global_mean)
 
     def get_obs(self):
         """Return sparse observation for the model:
