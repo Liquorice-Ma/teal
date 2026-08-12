@@ -147,6 +147,27 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
              'pairs; node-level samples source nodes whose outgoing '
              'demands are all observed')
     parser.add_argument(
+        '--mask-init', type=float, default=57.0,
+        help='initial scale of the learnable mask embedding; default is '
+             'the median nonzero demand of the Starlink trace. Must stay '
+             'within the demand distribution: values near zero make the '
+             'embed mode identical to zero-filling, while the arithmetic '
+             'mean over-estimates on heavy-tailed traffic')
+    parser.add_argument(
+        '--deterministic', action='store_true',
+        help='force deterministic GPU algorithms to remove run-to-run '
+             'variance (slower, but needed when the method gap is smaller '
+             'than the seed noise)')
+    parser.add_argument(
+        '--num-path', type=int, default=4,
+        help='number of candidate paths per demand')
+    parser.add_argument(
+        '--shared-paths', action='store_true',
+        help='use k-shortest paths that may share links instead of '
+             'edge-disjoint ones. Edge-disjoint path sets leave nothing '
+             'for the policy to decide (their paths never contend for the '
+             'same link), so uniform splitting is already near-optimal')
+    parser.add_argument(
         '--obs-sample', type=str, default='uniform',
         choices=['uniform', 'top'],
         help='flow-level sampling strategy: uniform random, or top '
@@ -162,10 +183,24 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
              'traffic matrix (for sparse satellite traffic)')
     parser.add_argument(
         '--mask-mode', type=str, default='embed',
-        choices=['embed', 'zero', 'mean'],
-        help='how to fill unobserved demands: learnable mask embedding, '
-             'zero filling, or mean interpolation over observed demands '
-             '(two-stage complete-then-optimize baseline)')
+        choices=['embed', 'nbr', 'zero', 'mean'],
+        help='how to fill unobserved demands: a learnable placeholder '
+             'shared by all of them (embed), a per-demand estimate from '
+             'observed demands sharing the same source scaled by a '
+             'learnable factor (nbr), zero filling, or mean interpolation '
+             'over observed demands (two-stage complete-then-optimize '
+             'baseline)')
+    parser.add_argument(
+        '--repair-input', type=str, default='oracle',
+        choices=['oracle', 'zero', 'nbr'],
+        help='which traffic matrix the MLU repair step may read. oracle '
+             'lets it read the ground-truth matrix (the original Teal '
+             'behaviour, legitimate under full observability but an '
+             'information advantage over the policy under sparse '
+             'observation); zero and nbr restrict it to the sparse '
+             'observation, with unobserved demands zero-filled or filled '
+             'by the neighbor estimate, which is what a deployable '
+             'controller can actually compute')
     parser.add_argument(
         '--no-gate', dest='no_gate', default=False, action='store_true',
         help='disable mask-aware gating in FlowGNN (ablation baseline)')
@@ -201,6 +236,23 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
     parser.add_argument(
         '--samples', type=int, default=5,
         help='number of COMA samples')
+    parser.add_argument(
+        '--reward-edges', type=int, default=1,
+        help='number of most-congested links credited in the MLU reward; '
+             '1 is the original single-bottleneck reward, larger values '
+             'soften the max and reduce gradient variance')
+    parser.add_argument(
+        '--reward-temperature', type=float, default=0.01,
+        help='softmax temperature over top-k link utilizations when '
+             '--reward-edges > 1')
+    parser.add_argument(
+        '--num-restart', type=int, default=1,
+        help='number of candidate initializations screened on the '
+             'validation slice before full training; a sizable fraction of '
+             'random inits never escape a bad region on this problem')
+    parser.add_argument(
+        '--warmup-epochs', type=int, default=5,
+        help='epochs per candidate during initialization screening')
     parser.add_argument(
         '--admm-steps', type=int, default=5,
         help='number of ADMM steps')

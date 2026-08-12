@@ -13,6 +13,9 @@ class TemporalEncoder(nn.Module):
     can be complemented by history.
     """
 
+    # batch chunk size; keeps batch*num_head below CUDA's 65535 grid limit
+    MAX_BATCH = 16384
+
     def __init__(self, hist_len, d_model=16, num_head=2, num_encoder_layer=1):
         """Initialize temporal encoder.
 
@@ -51,7 +54,12 @@ class TemporalEncoder(nn.Module):
         # transformer are sensitive to large inputs and diverge otherwise
         x = torch.log1p(tm_seq.T).unsqueeze(-1)
         x = self.input_linear(x) + self.pos_embedding
-        x = self.encoder(x)
+        # attention kernels launch grids over batch*num_head, which
+        # exceeds the 65535 CUDA grid-y limit on large demand sets
+        # (e.g. Starlink2224 with 38k path nodes); tokens are
+        # independent, so chunk along the batch axis (exact result)
+        x = torch.cat([self.encoder(chunk)
+                       for chunk in x.split(self.MAX_BATCH)], dim=0)
 
         # return embeddings at the latest time step
         return x[:, -1, :]

@@ -18,7 +18,7 @@ class TealActor(nn.Module):
 
     def __init__(
             self, teal_env, num_layer, model_dir, model_save, device,
-            mask_mode='embed', gate=True,
+            mask_mode='embed', gate=True, mask_init=57.0,
             std=1, log_std_min=-10.0, log_std_max=10.0):
         """Initialize teal actor.
 
@@ -49,9 +49,28 @@ class TealActor(nn.Module):
         self.FlowGNN = FlowGNN(self.env, num_layer, gate=gate).to(self.device)
 
         # learnable mask embedding for unobserved demands
-        # replace masked-out entries instead of filling them with 0
+        # replace masked-out entries instead of filling them with 0.
+        # Must start away from zero: with a zeros init the embed branch is
+        # numerically identical to mask_mode='zero', which silently turns
+        # the ablation into a no-op. The scale matters too --- an init far
+        # below the demand distribution is indistinguishable from zeros in
+        # the model input. mask_init defaults to the median nonzero demand
+        # of the trace (~57 Mbps on Starlink), which sits well below the
+        # arithmetic mean (~159, used by the mean-interpolation baseline)
+        # because the demand distribution is heavy-tailed.
         self.mask_embedding = nn.Parameter(
-            torch.zeros(self.num_path, device=self.device))
+            mask_init*(0.75 + 0.5*torch.rand(
+                self.num_path, device=self.device)))
+        self.mask_init = mask_init
+        # learnable scale for the neighbor-aware fill (mask_mode='nbr').
+        # The neighbor mean sits at the arithmetic-mean scale (~159 Mbps on
+        # Starlink), which the init sweep showed to over-estimate; the best
+        # fill magnitude was the median (~57). Starting at 57/159 ~= 0.36
+        # keeps the per-demand relative differences --- the reason to use
+        # neighbors at all --- while placing the absolute level at the
+        # measured optimum.
+        self.mask_scale = nn.Parameter(
+            torch.full((1,), 0.36, device=self.device))
 
         # temporal module enabled when hist_len > 1:
         # transformer over historical sparse traffic matrices, fused with
@@ -101,6 +120,27 @@ class TealActor(nn.Module):
                 topo, num_layer, std < 0,
                 self.env.obs_type, self.env.obs_ratio, self.env.hist_len,
                 self.mask_mode, self.FlowGNN.gate))
+
+    def reinit_parameters(self):
+        """Re-initialize every learnable parameter.
+
+        Used for multi-restart initialization selection: on this problem a
+        substantial fraction of random inits get stuck in a bad region
+        (observed validation objectives of 2.4-3.2 against a normal 1.5),
+        and such a run is unusable. reset_parameters() covers the standard
+        torch modules (Linear, LayerNorm, MultiheadAttention), while the
+        mask embedding is redrawn explicitly since it is a bare Parameter.
+        """
+
+        for module in self.modules():
+            if module is not self and hasattr(module, 'reset_parameters'):
+                module.reset_parameters()
+        self.apply(weight_initialization)
+        with torch.no_grad():
+            self.mask_embedding.copy_(
+                self.mask_init*(0.75 + 0.5*torch.rand_like(
+                    self.mask_embedding)))
+            self.mask_scale.fill_(0.36)
 
     def load_model(self):
         """Load from model fname."""
@@ -186,6 +226,14 @@ class TealActor(nn.Module):
             tm = tm + \
                 self.mask_embedding.repeat(
                     self.env.num_path_node//self.num_path) * (1 - path_mask)
+        elif self.mask_mode == 'nbr':
+            # neighbor-aware fill: per-demand estimate from observed demands
+            # sharing the same source, scaled by a learnable factor. Unlike
+            # 'embed', the fill differs across demands and therefore carries
+            # information the policy can act on.
+            est = self.env.neighbor_estimate(tm[::self.num_path])
+            tm = tm + (self.mask_scale*est).repeat_interleave(
+                self.num_path) * (1 - path_mask)
         elif self.mask_mode == 'mean':
             # mean interpolation: two-stage complete-then-optimize baseline
             tm = tm + tm.sum()/path_mask.sum() * (1 - path_mask)

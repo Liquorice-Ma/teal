@@ -141,10 +141,11 @@ split ratios for \emph{all} active demands,
 maximizing the \emph{ground-truth} objective. Let
 $f_{i,k}(\pi) = \tilde{r}_{i,k} \cdot d_i$ denote the flow actually
 delivered on path $p_{i,k}$, where $\{\tilde{r}_i\}$ are the policy's
-ratios after a feasibility-restoration step (needed only for the
-throughput objective, realized by ADMM refinement and rounding in
-\cref{sec:training}; under MLU the ratios are directly feasible by
-\eqref{eq:conserve}). Formally, for MLU minimization
+ratios after an optional repair step (\cref{sec:training}): ADMM
+refinement with rounding under the throughput objective, and
+conservation-preserving rebalancing under MLU, where the ratios are
+already conservation-feasible by \eqref{eq:conserve} but may still
+overload individual links. Formally, for MLU minimization
 \begin{equation}
     \min_{\pi} \;
     \mathbb{E}_t \Bigl[ \max_{e \in E^t}
@@ -202,9 +203,9 @@ is non-differentiable through the capacity-constrained network and the true
 $D$ is available only as a training-time signal, we
 optimize~\eqref{eq:rl-obj} with multi-agent reinforcement learning --- each
 demand acts as an agent sharing $\theta$, receiving a COMA-style
-marginal-contribution reward (\cref{sec:design}) --- followed by a
-lightweight ADMM refinement at inference to repair residual violations
-of~\eqref{eq:capacity}. This paradigm makes the observation
+marginal-contribution reward (\cref{sec:design}) --- followed by an
+optional lightweight repair step at inference that relieves overloaded
+links (\cref{sec:training}). This paradigm makes the observation
 model~\eqref{eq:obs} a property of the \emph{input}, and the optimization
 target~\eqref{eq:sparse-obj} a property of the \emph{training signal},
 cleanly separating what the policy can see from what it is optimized for.

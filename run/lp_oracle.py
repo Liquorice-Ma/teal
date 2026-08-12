@@ -69,6 +69,8 @@ def solve_mlu(env, demand):
 if __name__ == '__main__':
     args, _, problems = get_args_and_problems('lp-oracle-{}-{}.csv')
     num_path, edge_disjoint, dist_metric = PATH_FORM_HYPERPARAMS
+    num_path = args.num_path
+    edge_disjoint = not args.shared_paths
 
     env = TealEnv(
         obj='min_max_link_util', topo=args.topo, problems=problems,

@@ -41,6 +41,8 @@ OUTPUT_CSV_TEMPLATE = "teal-{}-{}.csv"
 def benchmark(problems, output_csv, arg):
 
     num_path, edge_disjoint, dist_metric = PATH_FORM_HYPERPARAMS
+    num_path = args.num_path
+    edge_disjoint = not args.shared_paths
     obj, topo = args.obj, args.topo
     model_save = args.model_save
     device = torch.device(
@@ -51,6 +53,13 @@ def benchmark(problems, output_csv, arg):
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
     torch.cuda.manual_seed_all(args.seed)
+    if args.deterministic:
+        # remove GPU atomic-scatter non-determinism: the method gap on this
+        # problem is 2-3% while unconstrained runs vary by ~5%, so the seed
+        # noise must be suppressed to make the gap measurable
+        torch.backends.cudnn.deterministic = True
+        torch.backends.cudnn.benchmark = False
+        torch.use_deterministic_algorithms(True, warn_only=True)
 
     # ========== load hyperparameters
     # env hyper-parameters
@@ -100,7 +109,10 @@ def benchmark(problems, output_csv, arg):
         hist_len=hist_len,
         prune_demands=prune_demands,
         demand_split=demand_split,
-        test_topo=test_topo)
+        test_topo=test_topo,
+        num_reward_edge=args.reward_edges,
+        reward_temperature=args.reward_temperature,
+        repair_input=args.repair_input)
     teal_actor = TealActor(
         teal_env=teal_env,
         num_layer=num_layer,
@@ -108,6 +120,7 @@ def benchmark(problems, output_csv, arg):
         model_save=model_save,
         device=device,
         mask_mode=mask_mode,
+        mask_init=args.mask_init,
         gate=gate)
     teal = Teal(
         teal_env=teal_env,
@@ -119,7 +132,9 @@ def benchmark(problems, output_csv, arg):
     teal.train(
         num_epoch=num_epoch,
         batch_size=batch_size,
-        num_sample=num_sample)
+        num_sample=num_sample,
+        num_restart=args.num_restart,
+        warmup_epoch=args.warmup_epochs)
     teal.test(
         num_admm_step=num_admm_step,
         output_header=HEADERS,

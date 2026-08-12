@@ -1,0 +1,16 @@
+config,seed,mlu
+ours,0,2.4029
+no-embed,0,2.3497
+no-gate,0,2.3703
+no-temporal,0,1.9069
+zero-fill,0,1.9151
+ours,1,1.8208
+no-embed,1,1.8243
+no-gate,1,2.0228
+no-temporal,1,2.0346
+zero-fill,1,2.3477
+ours,2,2.1842
+no-embed,2,2.1830
+no-gate,2,2.2298
+no-temporal,2,2.4622
+zero-fill,2,2.1203

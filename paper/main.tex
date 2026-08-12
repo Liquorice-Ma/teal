@@ -27,7 +27,7 @@
 
 \begin{document}
 
-\title{A Glimpse Is Enough: \\ Mask-Aware Sparse-Input Traffic Engineering \\ for LEO Satellite Constellations}
+\title{When Repair Absorbs Learning: \\ A Mechanism Study of Learned Traffic Engineering \\ under Sparse Traffic Observations}
 
 \author{%
     Linhui~Wei,
@@ -49,40 +49,51 @@
 }
 
 \markboth{IEEE Transactions on Network Science and Engineering}%
-{Wei \MakeLowercase{\textit{et al.}}: A Glimpse Is Enough: Mask-Aware Sparse-Input Traffic Engineering for LEO Satellite Constellations}
+{Wei \MakeLowercase{\textit{et al.}}: When Repair Absorbs Learning: A Mechanism Study of Learned Traffic Engineering under Sparse Traffic Observations}
 
 % compsoc 模式：摘要与关键词包进 title-abstract-index 块
 \IEEEtitleabstractindextext{%
 \begin{abstract}
-Traffic engineering (TE) is a key control primitive for low-Earth-orbit
-(LEO) satellite constellations, whose topologies and traffic change
-continuously as satellites move. Existing learning-based TE systems ---
-for terrestrial and satellite networks alike --- assume that the complete
-traffic matrix is measured and delivered to the controller at every
-decision epoch. This assumption rarely holds in practice: network-wide
-measurement competes with user traffic for scarce onboard resources, and
-the controller typically observes only a sparse subset of demands. We
-present \sysname{}, a learning-based TE system that allocates traffic for
-\emph{all} active demands directly from sparse observations. \sysname{}
-represents unmeasured demands with learnable mask embeddings instead of
-zeros, gates message passing so that placeholders never contaminate
-link-state estimates, and recovers missing information from the recent
-observation history through a Transformer fused with spatial embeddings
-via per-demand cross-attention --- all trained end-to-end against the TE
-objective without an explicit completion stage. Demand pruning and
-size-invariant weights further allow a model trained once to be reused as
-the topology and the active demand set drift, without retraining. On a
-1{,}584-satellite Starlink-like constellation with real traffic dynamics,
-\sysname{} keeps the realized maximum link utilization within
-\todo{XX}\% of the fully-observed optimum with only \todo{XX}\%
-observability, outperforming zero-filling and two-stage
-complete-then-optimize baselines by up to \todo{XX}\%, at \todo{XX}~ms
-inference per snapshot.
+Learning-based traffic engineering (TE) systems increasingly pair a
+neural allocator with a repair layer that restores allocations to
+feasibility, and under sparse traffic observation --- the
+norm in low-Earth-orbit satellite constellations, where only a subset
+of demands is metered --- the learned component is additionally
+expected to impute the missing demand information. The two components
+are tacitly assumed to compose: learning refines the allocation and
+repair fixes whatever remains. We show that this assumption fails.
+In a controlled study of a sparse-input TE system on a
+1{,}584-satellite Starlink constellation with real traffic dynamics,
+we find that the repair layer \emph{absorbs} the learning signal:
+repair behaves as a switch rather than a dial --- a single repair sweep
+collapses the training gain from $+28\%$ to zero and further sweeps
+change nothing --- so with repair present a trained network is
+indistinguishable from an untrained one (9/25 paired wins, and a
+$95\%$ interval on the paired gain that rules out any improvement
+beyond $0.6\%$).
+Learning pays off only in a repair-free regime, but does so across
+the entire observability range tested (13/15 paired wins,
+$\rho \in [0.02, 0.5]$), peaking at $+28.1\%$
+at $\rho = 0.3$; no collapse boundary exists even at
+$\rho = 0.02$, where two of three seeds still improve. The learned system's remaining edge over
+zero-filling is stability --- lower variance and better worst-case
+maximum link utilization --- rather than median performance. A
+one-third-scale constellation instance reproduces the same mechanism.
+Finally, we show that this repair layer --- inherited from the
+fully-observed setting it was designed for --- silently consults the
+\emph{ground-truth} traffic matrix to rank congested paths, information a
+sparsely-measuring controller does not have. Restricting repair to the
+observation it can actually see removes much of its advantage, which
+moves the operative question from whether learning helps to which
+component is allowed to see the traffic.
+These findings redraw the boundary of where learned TE adds value and
+yield concrete guidance for combining learning with feasibility
+repair.
 \end{abstract}
 
 \begin{IEEEkeywords}
 Satellite networks, traffic engineering, sparse measurement, graph neural
-networks, reinforcement learning.
+networks, constraint repair, mechanism analysis.
 \end{IEEEkeywords}}
 
 \maketitle
@@ -96,8 +107,5 @@ networks, reinforcement learning.
 \input{sections/04-design}
 \input{sections/05-evaluation}
 \input{sections/06-conclusion}
-
-\bibliographystyle{IEEEtran}
-\bibliography{refs}
 
 \end{document}

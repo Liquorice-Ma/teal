@@ -28,6 +28,8 @@ class TealEnv(object):
             obs_ratio=1.0, obs_type='flow', obs_sample='uniform',
             hist_len=1, prune_demands=False,
             demand_split=False, test_topo=None,
+            num_reward_edge=1, reward_temperature=0.01,
+            repair_input='oracle',
             raw_action_min=-10.0, raw_action_max=10.0):
         """Initialize Teal environment.
 
@@ -59,6 +61,10 @@ class TealEnv(object):
             test_topo: alternative topology json used at test time only;
                 the graph, paths and ADMM are rebuilt while model weights
                 stay unchanged (topology-drift zero-retraining)
+            num_reward_edge: number of most-congested links that receive
+                credit in the MLU reward (1 recovers the original argmax)
+            reward_temperature: softmax temperature over the top-k link
+                utilizations when num_reward_edge > 1
             raw_action_min: min value when clamp raw action
             raw_action_max: max value when clamp raw action
         """
@@ -81,6 +87,13 @@ class TealEnv(object):
         self.obs_type = obs_type
         self.obs_sample = obs_sample
         self.hist_len = hist_len
+
+        # softened-max reward for the MLU objective: number of congested
+        # links that receive credit, and the softmax temperature over their
+        # utilizations (temperature -> 0 recovers the plain argmax)
+        self.num_reward_edge = num_reward_edge
+        self.reward_temperature = reward_temperature
+        self.repair_input = repair_input
 
         # init matrices related to topology; topo_active tracks the graph
         # currently loaded (training topo, or test_topo during testing)
@@ -241,6 +254,42 @@ class TealEnv(object):
             mask[idx_observed] = 1
         return mask.to(self.device)
 
+    def neighbor_estimate(self, tm_demand):
+        """Return a per-demand fill value derived from observed neighbors.
+
+        A single learnable placeholder shared by every unobserved demand
+        carries no discriminative information: the policy applies a softmax
+        over each demand's paths, so adding the same offset to all of them
+        leaves the split ratios essentially unchanged (measured: 0.05%
+        difference against plain zero-filling). Instead, an unobserved
+        demand (s,t) is filled with the mean of the observed demands that
+        share its source s --- satellites serve a common geographic
+        footprint, so their egress volumes correlate. Sources without any
+        observed demand fall back to the global mean of observed traffic.
+
+        Args:
+            tm_demand: demand-level traffic of the current snapshot
+        """
+
+        num_node = self.G.number_of_nodes()
+        # demand_src stays on CPU because it indexes CPU tensors when reading
+        # traffic matrices; scatter needs it on the compute device
+        if getattr(self, '_src_dev', None) is None \
+                or self._src_dev.device != tm_demand.device \
+                or self._src_dev.numel() != tm_demand.numel():
+            self._src_dev = self.demand_src.to(tm_demand.device)
+        src_idx = self._src_dev
+        observed = tm_demand * self.obs_mask
+        src_sum = torch_scatter.scatter(
+            observed, src_idx, dim_size=num_node)
+        src_cnt = torch_scatter.scatter(
+            self.obs_mask, src_idx, dim_size=num_node)
+        src_mean = src_sum/src_cnt.clamp(min=1)
+        est = src_mean[src_idx]
+        global_mean = observed.sum()/self.obs_mask.sum().clamp(min=1)
+        return torch.where(
+            src_cnt[src_idx] > 0, est, global_mean)
+
     def get_obs(self):
         """Return sparse observation for the model:
         (capacity + historical sparse traffic matrices + mask).
@@ -350,6 +399,14 @@ class TealEnv(object):
                 # total flow require no constraint violation
                 action = self.ADMM.tune_action(self.obs, action, num_admm_step)
                 action = self.round_action(action)
+            elif self.obj == 'min_max_link_util' and num_admm_step > 0:
+                # conservation-preserving rebalancing (cf. rebalance_action)
+                if self.repair_input == 'oracle':
+                    action = self.rebalance_action(
+                        action, num_iter=10*num_admm_step)
+                else:
+                    action = self.repair_on_estimate(
+                        raw_action, num_iter=10*num_admm_step)
             info['runtime'] = time.time() - start_time
             info['sol_mat'] = self.extract_sol_mat(action)
             reward = self.get_obj(action)
@@ -357,6 +414,91 @@ class TealEnv(object):
         # next observation
         self._next_obs()
         return reward, info
+
+    def rebalance_action(self, action, num_iter=20, step=0.5):
+        """Return rebalanced action for the MLU objective.
+
+        Conservation-preserving repair: iteratively moves a fraction of
+        flow from each demand's most congested path (by bottleneck link
+        utilization) to its least congested one. Per-demand totals stay
+        unchanged, so MLU cannot be lowered by under-serving traffic ---
+        unlike ADMM, whose slack on the demand constraint drops flow.
+
+        Args:
+            action: path flows (num_path_node)
+            num_iter: number of rebalancing iterations
+            step: fraction of the donor path's flow moved per iteration
+        """
+
+        capacity = self.obs[:-self.num_path_node]
+        num_demand = self.num_path_node//self.num_path
+        idx = torch.arange(num_demand).to(self.device)
+        for _ in range(num_iter):
+            edge_flow = torch_scatter.scatter(
+                action[self.p2e[0]], self.p2e[1],
+                dim_size=self.num_edge_node)
+            util = edge_flow/capacity
+            # bottleneck utilization of each path
+            path_util = torch_scatter.scatter_max(
+                util[self.p2e[1]], self.p2e[0],
+                dim_size=self.num_path_node)[0].reshape(-1, self.num_path)
+            donor = path_util.argmax(-1)
+            receiver = path_util.argmin(-1)
+            # move only when it strictly improves the demand's bottleneck
+            gain = path_util[idx, donor] - path_util[idx, receiver] > 1e-6
+            donor = idx*self.num_path + donor
+            receiver = idx*self.num_path + receiver
+            move = step*action[donor]*gain
+            action = action.clone()
+            action[donor] -= move
+            action[receiver] += move
+        return action
+
+    def estimated_demand(self):
+        """Return per-path-node demand as the *controller* can see it.
+
+        The repair step is a control decision, so under sparse observation
+        it may only use information the controller actually has. 'oracle'
+        reproduces the original behaviour, in which repair reads the full
+        traffic matrix --- legitimate in the fully-observed WAN setting
+        Teal was designed for, but an information advantage over the policy
+        here. 'zero' and 'nbr' restrict repair to the sparse observation,
+        filled the same way a deployable controller would fill it.
+        """
+
+        true_demand = self.obs[-self.num_path_node:]
+        if self.repair_input == 'oracle':
+            return true_demand
+        if self.repair_input == 'zero':
+            return true_demand*self.obs_mask.repeat_interleave(self.num_path)
+        # 'nbr': unobserved demands take the neighbor estimate
+        tm_demand = true_demand[::self.num_path]
+        filled = torch.where(
+            self.obs_mask > 0, tm_demand, self.neighbor_estimate(tm_demand))
+        return filled.repeat_interleave(self.num_path)
+
+    def repair_on_estimate(self, raw_action, num_iter=20):
+        """Return repaired action when repair sees only the observation.
+
+        Rebalancing runs on the demand estimate, so the resulting split
+        ratios are decided without ground-truth traffic; those ratios are
+        then realized on the true demands, exactly as a deployed forwarding
+        plane would apply them. Demands whose estimate is zero carry no
+        estimated flow, leaving repair no basis to move them, so their
+        original ratios are kept.
+
+        Args:
+            raw_action: raw action from actor
+            num_iter: number of rebalancing iterations
+        """
+
+        ratio = self.transform_raw_action(raw_action, return_ratio=True)
+        flow_est = self.rebalance_action(
+            ratio.flatten()*self.estimated_demand(), num_iter=num_iter)
+        repaired = flow_est.reshape(-1, self.num_path)
+        total = repaired.sum(axis=-1, keepdim=True)
+        ratio = torch.where(total > 0, repaired/total.clamp(min=1e-12), ratio)
+        return ratio.flatten()*self.obs[-self.num_path_node:]
 
     def get_obj(self, action):
         """Return objective."""
@@ -368,11 +510,12 @@ class TealEnv(object):
                 action[self.p2e[0]], self.p2e[1]
                 )/self.obs[:-self.num_path_node]).max()
 
-    def transform_raw_action(self, raw_action):
+    def transform_raw_action(self, raw_action, return_ratio=False):
         """Return network flow allocation as action.
 
         Args:
             raw_action: raw action directly from ML output
+            return_ratio: return per-demand split ratios instead of flows
         """
         # clamp raw action between raw_action_min and raw_action_max
         raw_action = torch.clamp(
@@ -389,6 +532,8 @@ class TealEnv(object):
             raw_action = raw_action/(1+raw_action.sum(axis=-1)[:, None])
 
         # translate split ratio to flow
+        if return_ratio:
+            return raw_action
         raw_action = raw_action.flatten() * self.obs[-self.num_path_node:]
 
         return raw_action
@@ -516,13 +661,25 @@ class TealEnv(object):
 
         elif self.obj == 'min_max_link_util':
 
-            # find link with max utilization
-            max_util_edge = util.argmax()
+            # softened max: spread credit over the top-k most congested links
+            # instead of the single argmax. With one link only, the gradient
+            # reaches a handful of demands and the bottleneck jumps between
+            # steps, making the signal extremely noisy; weighting the top-k
+            # links by a softmax over their utilization keeps the objective
+            # aligned with MLU while giving many more demands a useful
+            # gradient direction.
+            k = min(self.num_reward_edge, util.numel())
+            top_util, top_edge = torch.topk(util, k)
+            weight = torch.softmax(top_util/self.reward_temperature, dim=0)
 
-            # prepare paths related to max_util_edge
-            max_util_paths = torch.zeros(self.num_path_node).to(self.device)
-            max_util_paths[self.p2e[0, self.p2e[1] == max_util_edge]] =\
-                1/self.obs[max_util_edge]
+            # per-path coefficient: sum over the top-k links it traverses,
+            # each scaled by its weight and inverse capacity
+            edge_coef = torch.zeros(self.num_edge_node).to(self.device)
+            edge_coef[top_edge] = weight/self.obs[:-self.num_path_node][
+                top_edge]
+            max_util_paths = torch_scatter.scatter(
+                edge_coef[self.p2e[1]], self.p2e[0],
+                dim_size=self.num_path_node)
 
             # sample raw_actions and change each node pair at a time for reward
             for _ in range(num_sample):
