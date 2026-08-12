@@ -191,6 +191,17 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
              'over observed demands (two-stage complete-then-optimize '
              'baseline)')
     parser.add_argument(
+        '--repair-input', type=str, default='oracle',
+        choices=['oracle', 'zero', 'nbr'],
+        help='which traffic matrix the MLU repair step may read. oracle '
+             'lets it read the ground-truth matrix (the original Teal '
+             'behaviour, legitimate under full observability but an '
+             'information advantage over the policy under sparse '
+             'observation); zero and nbr restrict it to the sparse '
+             'observation, with unobserved demands zero-filled or filled '
+             'by the neighbor estimate, which is what a deployable '
+             'controller can actually compute')
+    parser.add_argument(
         '--no-gate', dest='no_gate', default=False, action='store_true',
         help='disable mask-aware gating in FlowGNN (ablation baseline)')
     parser.add_argument(

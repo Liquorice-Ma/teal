@@ -29,6 +29,7 @@ class TealEnv(object):
             hist_len=1, prune_demands=False,
             demand_split=False, test_topo=None,
             num_reward_edge=1, reward_temperature=0.01,
+            repair_input='oracle',
             raw_action_min=-10.0, raw_action_max=10.0):
         """Initialize Teal environment.
 
@@ -92,6 +93,7 @@ class TealEnv(object):
         # utilizations (temperature -> 0 recovers the plain argmax)
         self.num_reward_edge = num_reward_edge
         self.reward_temperature = reward_temperature
+        self.repair_input = repair_input
 
         # init matrices related to topology; topo_active tracks the graph
         # currently loaded (training topo, or test_topo during testing)
@@ -399,8 +401,12 @@ class TealEnv(object):
                 action = self.round_action(action)
             elif self.obj == 'min_max_link_util' and num_admm_step > 0:
                 # conservation-preserving rebalancing (cf. rebalance_action)
-                action = self.rebalance_action(
-                    action, num_iter=10*num_admm_step)
+                if self.repair_input == 'oracle':
+                    action = self.rebalance_action(
+                        action, num_iter=10*num_admm_step)
+                else:
+                    action = self.repair_on_estimate(
+                        raw_action, num_iter=10*num_admm_step)
             info['runtime'] = time.time() - start_time
             info['sol_mat'] = self.extract_sol_mat(action)
             reward = self.get_obj(action)
@@ -448,6 +454,52 @@ class TealEnv(object):
             action[receiver] += move
         return action
 
+    def estimated_demand(self):
+        """Return per-path-node demand as the *controller* can see it.
+
+        The repair step is a control decision, so under sparse observation
+        it may only use information the controller actually has. 'oracle'
+        reproduces the original behaviour, in which repair reads the full
+        traffic matrix --- legitimate in the fully-observed WAN setting
+        Teal was designed for, but an information advantage over the policy
+        here. 'zero' and 'nbr' restrict repair to the sparse observation,
+        filled the same way a deployable controller would fill it.
+        """
+
+        true_demand = self.obs[-self.num_path_node:]
+        if self.repair_input == 'oracle':
+            return true_demand
+        if self.repair_input == 'zero':
+            return true_demand*self.obs_mask.repeat_interleave(self.num_path)
+        # 'nbr': unobserved demands take the neighbor estimate
+        tm_demand = true_demand[::self.num_path]
+        filled = torch.where(
+            self.obs_mask > 0, tm_demand, self.neighbor_estimate(tm_demand))
+        return filled.repeat_interleave(self.num_path)
+
+    def repair_on_estimate(self, raw_action, num_iter=20):
+        """Return repaired action when repair sees only the observation.
+
+        Rebalancing runs on the demand estimate, so the resulting split
+        ratios are decided without ground-truth traffic; those ratios are
+        then realized on the true demands, exactly as a deployed forwarding
+        plane would apply them. Demands whose estimate is zero carry no
+        estimated flow, leaving repair no basis to move them, so their
+        original ratios are kept.
+
+        Args:
+            raw_action: raw action from actor
+            num_iter: number of rebalancing iterations
+        """
+
+        ratio = self.transform_raw_action(raw_action, return_ratio=True)
+        flow_est = self.rebalance_action(
+            ratio.flatten()*self.estimated_demand(), num_iter=num_iter)
+        repaired = flow_est.reshape(-1, self.num_path)
+        total = repaired.sum(axis=-1, keepdim=True)
+        ratio = torch.where(total > 0, repaired/total.clamp(min=1e-12), ratio)
+        return ratio.flatten()*self.obs[-self.num_path_node:]
+
     def get_obj(self, action):
         """Return objective."""
 
@@ -458,11 +510,12 @@ class TealEnv(object):
                 action[self.p2e[0]], self.p2e[1]
                 )/self.obs[:-self.num_path_node]).max()
 
-    def transform_raw_action(self, raw_action):
+    def transform_raw_action(self, raw_action, return_ratio=False):
         """Return network flow allocation as action.
 
         Args:
             raw_action: raw action directly from ML output
+            return_ratio: return per-demand split ratios instead of flows
         """
         # clamp raw action between raw_action_min and raw_action_max
         raw_action = torch.clamp(
@@ -479,6 +532,8 @@ class TealEnv(object):
             raw_action = raw_action/(1+raw_action.sum(axis=-1)[:, None])
 
         # translate split ratio to flow
+        if return_ratio:
+            return raw_action
         raw_action = raw_action.flatten() * self.obs[-self.num_path_node:]
 
         return raw_action

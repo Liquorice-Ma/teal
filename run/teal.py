@@ -111,7 +111,8 @@ def benchmark(problems, output_csv, arg):
         demand_split=demand_split,
         test_topo=test_topo,
         num_reward_edge=args.reward_edges,
-        reward_temperature=args.reward_temperature)
+        reward_temperature=args.reward_temperature,
+        repair_input=args.repair_input)
     teal_actor = TealActor(
         teal_env=teal_env,
         num_layer=num_layer,

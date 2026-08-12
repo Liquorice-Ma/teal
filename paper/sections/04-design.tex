@@ -38,7 +38,7 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
     \Comment{temporal embeddings}
 \State $H_F \gets \textsc{CrossAttention}(H_T, H_S)$ \Comment{\cref{eq:fusion}}
 \State $\{r_i\} \gets \textsc{PolicyHead}([H_S \,\|\, H_F])$
-\State $\{r_i\} \gets \textsc{ADMMRepair}(\{r_i\}, G^t)$
+\State $\{r_i\} \gets \textsc{Repair}(\{r_i\}, G^t, \hat{D}^t)$
     \Comment{\cref{sec:training}}
 \State \Return $\{r_i\}$
 \end{algorithmic}
@@ -161,9 +161,9 @@ and values,
 and the fused features $[H_S \,\|\, H_F]$ feed the policy head. Intuitively,
 the temporal stream decides \emph{which} spatial evidence to trust for each
 path: when the current entry is missing, attention shifts toward paths and
-links whose states corroborate the historical pattern. The whole module adds
-\todo{XX}~ms to inference on our largest constellation
-(\cref{sec:eval}).
+links whose states corroborate the historical pattern. The full pipeline
+infers in under 0.4~s per snapshot on the 1{,}584-satellite constellation
+(\cref{sec:eval}), well within the 5-minute control-loop period.
 
 \subsection{Scaling to Dynamic Constellations}
 \label{sec:scaling}
@@ -239,12 +239,40 @@ retain reward-driven RL rather than imitation learning~\cite{fnc}:
 imitation learning requires expert allocations solved from \emph{fully
 realized} demands of each episode, a supervision signal that is unavailable
 when even post-hoc observation is sparse; RL needs only the reward, which
-the network itself provides. At inference, the MLU objective requires no
-repair --- the pure-softmax ratios satisfy flow
-conservation~\eqref{eq:conserve} by construction --- while under the
-throughput objective allocations are refined by two parallelizable
-ADMM~\cite{boyd2011} iterations to repair residual violations of the
-capacity constraint~\eqref{eq:capacity}, adding less than 1~ms.
+the network itself provides.
+
+\textbf{Constraint repair.} Under the throughput objective, allocations
+are refined by two parallelizable ADMM~\cite{boyd2011} iterations and a
+rounding pass that together repair residual violations of the capacity
+constraint~\eqref{eq:capacity}. Under the MLU objective --- our primary
+setting --- the situation differs, and the difference turns out to govern
+the rest of this paper. The softmax ratios already satisfy flow
+conservation~\eqref{eq:conserve} by construction, so there is no
+infeasibility to project away; what they can still do is overload
+individual links. The repair step is therefore not a projection but a
+\emph{conservation-preserving rebalancing}: for each demand it repeatedly
+shifts a fraction of the flow from its most congested candidate path ---
+ranked by the bottleneck utilization of the links that path traverses ---
+onto its least congested one, leaving per-demand totals untouched so that
+MLU cannot be lowered by under-serving traffic. One unit of repair budget
+corresponds to ten such sweeps.
+
+\textbf{What repair needs to know.} Ranking paths by bottleneck
+utilization requires link loads, and link loads require demand volumes.
+In the fully-observed WAN setting this repair mechanism was designed for,
+those volumes are available at decision time, so consulting them is
+unremarkable. Under sparse observation they are not: a controller that
+meters only a fraction $\rho$ of demands cannot compute the true
+utilization. We therefore promote \emph{which matrix repair reads} to an
+explicit factor of the study, with three settings --- \textsc{oracle},
+which reads the ground-truth matrix and reproduces the inherited
+implementation; \textsc{obs-zero}, which reads the sparse observation
+with unobserved demands zero-filled; and \textsc{obs-nbr}, which fills
+them with the neighbor estimate of \cref{sec:mask-embed}. Only the latter
+two are deployable under sparse measurement. \Cref{sec:eval} shows that
+this distinction --- invisible in the fully-observed setting, and to our
+knowledge never isolated before --- decides whether the learned component
+contributes at all.
 
 \begin{algorithm}[t]
 \caption{Offline training of \sysname{}}
@@ -287,5 +315,5 @@ weights apply to any demand set, which is what enables zero-retraining reuse
 4{,}468 trainable parameters --- small enough to be replicated on
 resource-constrained satellite platforms. Demand pruning reduces $D$ from
 $N(N-1)$ to the observed support --- roughly $400\times$ on our
-constellation --- turning an otherwise intractable problem into one solved
-in milliseconds (\cref{sec:runtime}).
+constellation --- turning an otherwise intractable problem into one
+solved well within the control period (\cref{sec:runtime}).

@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "skills": {
+    "ai-research-explore": {
+      "source": "lllllllama/rigorpilot-skills",
+      "sourceType": "github",
+      "skillPath": "skills/ai-research-explore/SKILL.md",
+      "computedHash": "7816168fcb2853a208fd0f7c95efea52e81a383f53d94318e43eb695199f6356"
+    },
+    "brainstorming-research-ideas": {
+      "source": "zechenzhangagi/ai-research-skills",
+      "sourceType": "github",
+      "skillPath": "21-research-ideation/brainstorming-research-ideas/SKILL.md",
+      "computedHash": "52b90982250c80b21fc3512d7223d28413c0f1b726703f461d6ea8a166d22a1d"
+    }
+  }
+}
