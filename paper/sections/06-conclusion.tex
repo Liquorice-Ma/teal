@@ -3,13 +3,15 @@
 
 This paper presented a controlled mechanism study of learned traffic
 engineering under sparse observations, using \sysname{} as the vehicle.
-The central finding is \emph{repair absorption}: when a convex repair
-layer is present, it saturates within a single ADMM iteration and
-absorbs the entire learned signal, rendering training indistinguishable
-from random initialization (9/25 paired wins on a 1{,}584-satellite
-Starlink constellation; 3/6 on a one-third-scale instance). The
-absorption is global --- it persists across observability levels,
-random seeds, and constellation scales.
+The central finding is \emph{repair absorption}: when a constraint-repair
+layer is present, it acts as a switch rather than a dial --- a single
+rebalancing sweep collapses the entire training differential, and
+further sweeps change nothing --- leaving a trained network
+indistinguishable from random initialization (9/25 paired wins on a
+1{,}584-satellite Starlink constellation, with a $95\%$ interval on the
+paired gain that rules out any improvement beyond $0.6\%$; 3/6 on a
+one-third-scale instance). The absorption is global: it persists across
+observability levels, random seeds, and constellation scales.
 
 Without repair, learning is effective across the entire observability
 range tested (13/15 paired wins, $\rho \in [0.02, 0.5]$), but the
@@ -19,21 +21,40 @@ smaller, denser instance. The one robust residual advantage of the
 trained system is stability --- lower seed spread and better worst-case
 MLU (up to +38\% at extreme sparsity) --- not median performance.
 
-These results carry direct guidance. For evaluation, learned TE systems
-paired with repair must be benchmarked repair-free or against repair-only
-controls; end-to-end numbers under repair conflate the two components.
-For design, if repair is retained for safety, the learning budget
-should target tail robustness rather than median improvement. For
-deployment, training remains worthwhile even at 2\% observability; the
-real question is whether to pay for repair at all.
+The mechanism has a cause that the prevailing evaluation protocol keeps
+out of view. To rank congested paths, repair needs demand volumes, and
+the implementation inherited from fully-observed WAN settings takes them
+from the ground-truth traffic matrix. Repair therefore competes with the
+learned imputation while already knowing what that imputation was trying
+to estimate --- an asymmetry that is unremarkable when the matrix is
+known, and unavailable when it is not. Restricting repair to the sparse
+observation costs it a substantial part of its advantage, which
+separates two things the literature reports as one: the repair
+\emph{algorithm} and the repair \emph{information}.
 
-Three directions remain open. First, the repair-absorption interaction
-likely generalizes to other projection mechanisms (dual-based
-projection, feasibility layers in differentiable optimization); a
-unified theory of when repair dominates learning would inform
-architecture design. Second, the stability advantage suggests a
-dedicated training objective --- explicitly optimizing worst-case MLU
-rather than mean --- may unlock what the current loss function leaves
-on the table. Third, measurement scheduling (deciding \emph{which}
-demands to observe next) becomes especially valuable in the no-repair
-regime where each observation directly informs the learned allocation.
+This distinction also fixes the scope of our results. The absorption
+measurements characterize the oracle-fed configuration --- the one
+current systems inherit and report --- so they are best read as a
+diagnosis of an evaluation protocol rather than a forecast for a
+deployable controller. Both readings are useful, and conflating them is
+precisely how the effect stayed invisible.
+
+The guidance follows directly. For evaluation, learned TE systems paired
+with repair must be benchmarked repair-free or against repair-only
+controls, and must state which matrix repair reads. For design, if
+repair is retained for safety, the learning budget should target tail
+robustness rather than median improvement. For deployment, training
+remains worthwhile even at 2\% observability, and the operative question
+is not whether to pay for repair but which matrix to hand it.
+
+Three directions remain open. First, whether absorption survives when
+the heuristic rebalancing is replaced by a genuine differentiable
+projection --- dual-based projection or a feasibility layer in
+differentiable optimization --- and whether such a layer, restricted to
+the observation, absorbs less. Second, the stability advantage suggests
+a dedicated training objective, explicitly optimizing worst-case MLU
+rather than the mean, may unlock what the current loss leaves on the
+table. Third, measurement scheduling --- deciding \emph{which} demands
+to observe next --- becomes especially valuable once repair no longer has
+free access to the full matrix, since each observation then improves the
+allocator and the repair step at once.

@@ -16,8 +16,9 @@ neural allocators replace online solvers and cut allocation time from
 minutes to milliseconds~\cite{teal,dote,harp,sate}. Because a neural
 allocator can emit allocations that overload individual links, these
 systems almost universally append a \emph{repair layer} --- a few steps
-of a convex procedure, e.g., ADMM~\cite{boyd2011}, that projects the raw
-allocation back onto the feasible flow polytope. Under sparse traffic
+of a convex procedure such as ADMM~\cite{boyd2011}, or a lightweight
+rebalancing heuristic, that restores the raw allocation to
+feasibility. Under sparse traffic
 observation, the learned component carries a second responsibility: since
 only a subset of demands is metered, it is also expected to
 \emph{impute} the missing demand information, whether through learned
@@ -47,7 +48,7 @@ This decomposition carries a tacit but load-bearing assumption:
 contribute whatever improvement it can learn from data, and the repair
 layer is assumed to add, on top of it, the correction of residual
 violations --- two positive, additive terms. Every system that couples a
-neural allocator with convex repair~\cite{teal,sate,dote} implicitly
+neural allocator with a repair layer~\cite{teal,sate,dote} implicitly
 relies on this assumption when it reports end-to-end performance: the
 measured gain is attributed to the pipeline as a whole, and no attempt
 is made to separate what the learned part contributes from what the
@@ -68,15 +69,15 @@ how. Our vehicle is \sysname{} (\underline{S}parse-\underline{i}nput
 \underline{T}raffic \underline{E}ngineering), a representative
 sparse-input TE system that combines learnable mask embeddings,
 mask-aware gated message passing, temporal-spatial cross-attention,
-and an ADMM repair layer (\cref{sec:design}). We conduct a controlled
+and a constraint-repair layer (\cref{sec:design}). We conduct a controlled
 mechanism study of \sysname{} on a
 1{,}584-satellite Starlink constellation (Shell-1 configuration) driven
 by real traffic dynamics, holding the architecture fixed and sweeping
 observability $\rho$, the repair budget, training status, and random
 seeds. \textbf{(RQ1) Does learning contribute when repair is present?}
 No. The repair layer \emph{absorbs} the learning signal, and it does so
-as a \emph{switch} rather than a dial: a single ADMM step collapses the
-training gain from $+28.1\%$ to $-3.3\%$, and two or five steps change
+as a \emph{switch} rather than a dial: a single repair sweep collapses the
+training gain from $+28.1\%$ to $-3.3\%$, and two or five sweeps change
 nothing further. Once that repair is in place a trained network is
 indistinguishable from an untrained one (9 of 25 paired snapshots won;
 sign test $p=0.115$ in the untrained direction, and a $95\%$ interval
@@ -91,11 +92,19 @@ seeds improve. No collapse boundary exists --- the mask embeddings
 regularize allocations even at 2\% observability. \textbf{(RQ3) Does the
 mechanism depend on constellation scale?} A one-third-scale instance of
 the same constellation architecture reproduces the absorption
-phenomenon (\cref{sec:eval}). Together, the results imply that the
-learned component and the repair component are \emph{functional
-substitutes}, not complements: each alone captures most of the
-available structure, and stacking them double-counts the same
-correction.
+phenomenon (\cref{sec:eval}). \textbf{(RQ4) What does repair need to
+know?} More than the policy does. To rank congested paths, the repair
+step needs demand volumes, and the implementation inherited from the
+fully-observed setting takes them from the \emph{ground-truth} matrix
+--- an information advantage over a policy that sees only a fraction
+$\rho$ of it, and one that no sparsely-measuring controller could
+reproduce. Restricting repair to the observation it can actually see
+costs it a substantial part of its advantage, which reopens the space
+the learned component was supposed to occupy. Together, the results
+imply that the learned component and the repair component are
+\emph{functional substitutes}, not complements --- and that the
+substitution is underwritten by an information asymmetry that the
+literature's evaluation protocol leaves invisible.
 
 The findings redraw the boundary of where learned TE adds value, and
 they carry concrete guidance. \emph{For evaluation}, a learned TE
@@ -110,14 +119,16 @@ snapshots against zero-filling, with markedly lower variance and a
 worst-case MLU up to 38\% better at extreme sparsity --- rather
 than median performance. \emph{For deployment}, the absence of a
 collapse boundary means training remains worth its cost even at
-2\% observability; the real decision is whether to pay for repair
-at all, since repair is what erases the learning signal.
+2\% observability; and the operative choice is not whether to pay for
+repair but which matrix to hand it --- the variant that erases the
+learning signal is precisely the variant a sparsely-measuring
+deployment cannot run.
 
 In summary, this paper makes the following contributions:
 \begin{itemize}
     \item We identify the \emph{repair--learning composition assumption}
     tacitly made by learned TE systems that couple a neural allocator
-    with a convex repair layer, and design a controlled protocol ---
+    with a constraint-repair layer, and design a controlled protocol ---
     varying training status, repair budget, observability, and seeds in
     isolation --- to test it (\cref{sec:formulation,sec:eval}).
     \item We show the assumption fails via a mechanism we call
@@ -132,4 +143,11 @@ In summary, this paper makes the following contributions:
     translate the findings into guidance for evaluating, designing,
     and deploying learned TE under sparse observations, validated
     across constellation scales (\cref{sec:eval,sec:conclusion}).
+    \item We show that the inherited repair layer owes much of its
+    strength to reading the ground-truth traffic matrix --- a
+    dependence that is unremarkable under full observability but
+    unavailable, and to our knowledge never isolated, under sparse
+    measurement. Making the matrix repair reads an explicit factor
+    separates the repair \emph{algorithm} from the repair
+    \emph{information} (\cref{sec:deployable}).
 \end{itemize}

@@ -74,7 +74,7 @@ demand set to the ${\sim}6.3$K pairs that ever carry traffic, out of
 \textbf{Protocol.} Our metric is the \emph{realized MLU} evaluated
 against ground-truth demands (lower is better); flow
 conservation~\eqref{eq:conserve} is enforced by construction, so MLU
-cannot be gamed by under-serving traffic. The study varies four factors
+cannot be gamed by under-serving traffic. The study varies five factors
 independently: observability
 $\rho \in \{0.02, 0.05, 0.1, 0.3, 0.5\}$; the repair budget
 $\in \{0, 1, 2, 5\}$ sweeps ($2$ is the deployed default); the matrix
@@ -106,7 +106,7 @@ report medians only for reference.
 
 No. \Cref{fig:rq1} compares the trained system against the untrained
 control across all five observability levels, both with the default
-two-step repair, and \cref{tab:rq1-strat} gives the paired statistics
+two-sweep repair, and \cref{tab:rq1-strat} gives the paired statistics
 per $\rho$. The trained system wins only 9 of 25 paired cells, with a
 median paired gain of $-1.8\%$ --- marginally in favour of the
 untrained control --- and a sign test does not reject indifference
@@ -199,7 +199,9 @@ everything else held fixed. \Cref{tab:saturation} reports both the
 absolute medians and the paired training gain at each budget, and the
 two tell opposite stories. In \emph{absolute} terms repair is enormously
 valuable: it lowers the median MLU from $2.83$ to $1.60$, a $44\%$
-improvement that no amount of training comes close to. In
+improvement that no amount of training comes close to --- though
+\cref{sec:deployable} will show that part of this figure is the
+information repair reads rather than the rebalancing itself. In
 \emph{differential} terms it is destructive: the training gain collapses
 from $+28.1\%$ (3/3 paired wins) at zero budget to $-3.3\%$ (1/3) after
 a single unit, and never recovers at two or five, whose medians
@@ -406,12 +408,13 @@ Although latency is not the subject of this study, it determines whether
 the mechanism we analyse is relevant to a deployable controller. On the
 1{,}584-satellite constellation, one full inference pass --- demand-set
 assembly, graph rebuild, gated GNN, temporal encoder, fusion, policy
-head, and the two-step ADMM repair --- completes in under $0.4$~s per
+head, and the two-sweep repair --- completes in under $0.4$~s per
 snapshot on a single GPU, against a control-loop period of 5 minutes.
-The repair layer itself accounts for a negligible share of this budget,
-which is precisely why it is attractive to keep and why its interaction
-with learning matters: repair is nearly free in time, but, as
-\cref{sec:rq1} shows, expensive in learned signal.
+Repair is structurally cheap --- two sweeps amount to twenty sparse
+scatter operations over the path--link incidence --- which is precisely
+why it is attractive to keep, and why its interaction with learning
+matters: inexpensive in latency, but, as \cref{sec:rq1} shows,
+expensive in learned signal.
 
 \subsection{Repair Without the Oracle}
 \label{sec:deployable}
@@ -464,10 +467,14 @@ across rho, paired wins and gains}
 \label{sec:takeaways}
 
 \begin{itemize}
-    \item \textbf{Evaluation.} A learned TE system paired with convex
-    repair must be benchmarked repair-free or against repair-only
-    controls; end-to-end numbers under repair conflate the two
-    components and can certify a model whose weights contribute nothing.
+    \item \textbf{Evaluation.} A learned TE system paired with a
+    constraint-repair layer must be benchmarked repair-free or against
+    repair-only controls; end-to-end numbers under repair conflate the
+    two components and can certify a model whose weights contribute
+    nothing. Report, in addition, \emph{which} traffic matrix the repair
+    step is allowed to read: a repair layer holding the ground truth is
+    not the same system as one holding the observation
+    (\cref{sec:deployable}).
     \item \textbf{Design.} If repair is kept for safety, spend the
     learning budget on what repair cannot provide --- tail robustness
     (\cref{sec:rq3}) --- and evaluate it on spread and worst case, not
@@ -475,8 +482,14 @@ across rho, paired wins and gains}
     \item \textbf{Deployment.} Learning is effective across the
     entire observability range once repair is removed (13/15 paired
     wins), so there is no lower observability cutoff below which
-    training should be abandoned. The real deployment decision is
-    whether to pay for repair at all: it buys a large absolute
-    improvement ($44\%$ lower MLU here) at the price of the entire
-    learned differential.
+    training should be abandoned. The operative choice is not whether to
+    pay for repair but which matrix to hand it: the oracle-fed variant
+    that erases the learned differential is precisely the variant a
+    sparsely-measuring controller cannot run.
+    \item \textbf{Scope of \cref{sec:rq1,sec:rq3}.} Those results
+    characterize the oracle-fed configuration, which is what current
+    systems inherit and report --- so they are a diagnosis of the
+    prevailing \emph{evaluation protocol}, not a prediction about a
+    deployable controller. Both readings matter, and conflating them is
+    how the absorption effect stayed invisible.
 \end{itemize}

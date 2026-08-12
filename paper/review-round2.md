@@ -307,6 +307,26 @@ TNSE 读者需要被明确告知"为什么一篇不提供新 SOTA 的机制论�
 
 ---
 
+## 附录 C：第二轮意见的落实记录（作者回应）
+
+> 本节记录第二轮报告发出后的即时修订，供第三轮核验。
+
+| # | 意见 | 落实 | 核验方式 |
+|---|---|---|---|
+| N-1 | 修复层术语 12 处自相矛盾 | ✅ **已解决** | 全文 grep 复核：`ADMM` 剩 3 处，均为**合法用法**（§1 描述领域普遍做法「convex procedure such as ADMM, or a lightweight rebalancing heuristic」；§3.3 与 §4.6 指吞吐目标下真实使用的 ADMM+rounding）。`convex repair`/`polytope`/`projects onto` 已清零；关键词改为 constraint repair |
+| N-2 | Takeaways/结论给出不可执行建议 | ✅ **已解决** | §5.9 与 §6 均改为「操作性选择不是要不要为 repair 付费，而是把哪个矩阵交给它」；摘要新增 oracle 依赖披露；引言 deployment 段同步 |
+| N-3 | 44% 归因与 §5.8 冲突 | ✅ **已解决** | §5.2 首次给出 44% 处加前向指针，指明部分来自 repair 读到的信息而非再平衡本身 |
+| N-4 | 延迟数字与开销断言无证据 | 🔶 **部分** | 已删除未测量的「negligible share of this budget」，改为代码结构可支撑的表述（两轮 = 20 次稀疏 scatter）。**`under 0.4 s` 仍待实测**：注意 `info['runtime']` 仅覆盖 transform+repair+extract，不含 GNN/Transformer 前向，故 0.056 s 与 0.4 s 量的不是同一段，不可直接替换 |
+| N-5 | 「four factors」计数错误 | ✅ **已解决** | 改为 five factors |
+| N-6 | two-step / sweeps 用语不一致 | ✅ **已解决** | 全文 `two-step` 清零 |
+| DA-4 | RQ1/RQ3 的独立定位未交代 | ✅ **已解决** | §5.9 新增 **Scope** 条、§6 新增独立段落，明确定位为「对既有评估协议的诊断」而非「对可部署系统的预测」 |
+| M3-1 | 可微优化文献缺失 | 🔶 **部分** | §6 future work 已把该方向重构为可检验问题（换成真正的可微投影后吸收是否仍成立），措辞不再是「承认存在却不引用」；**bib 条目仍需补** |
+| E1 | negative result 价值前置 | 🔶 **部分** | 摘要末段新增最具警示性的发现（repair 隐含读真值），但首句仍为背景铺陈 |
+
+**编译核验**：12 页，exit=0，0 未定义引用，0 严重 Overfull，残留 `\todo` 2 处（均等 `deployable_repair.csv` 数据）。
+
+---
+
 ## 附录 A：实验批次状态（审查时点）
 
 | 批次 | 用途 | 进度 | 失败 |

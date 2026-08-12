@@ -15,7 +15,8 @@ between candidate paths and links without letting placeholders contaminate
 link states (\cref{sec:gating}); (iii) a Transformer encodes the observation
 history and fuses it with spatial embeddings via per-demand cross-attention
 (\cref{sec:fusion}); (iv) a shared policy head outputs split ratios per
-demand, refined by ADMM (\cref{sec:training}). All learnable weights are
+demand, refined by the constraint-repair step (\cref{sec:training}). All
+learnable weights are
 shared across demands and independent of the demand-set size, which
 \cref{sec:scaling} exploits for zero-retraining deployment under
 constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
@@ -51,7 +52,7 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
     \caption{\sysname{} overview: a sparse observation is embedded with
     mask awareness, processed by a gated flow-centric GNN in parallel with a
     temporal encoder, fused via per-demand cross-attention, and mapped to
-    split ratios refined by ADMM.}
+    split ratios refined by the constraint-repair step.}
     \label{fig:arch}
 \end{figure}
 

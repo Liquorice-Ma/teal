@@ -55,8 +55,8 @@
 \IEEEtitleabstractindextext{%
 \begin{abstract}
 Learning-based traffic engineering (TE) systems increasingly pair a
-neural allocator with a convex repair layer that projects allocations
-back onto feasible flows, and under sparse traffic observation --- the
+neural allocator with a repair layer that restores allocations to
+feasibility, and under sparse traffic observation --- the
 norm in low-Earth-orbit satellite constellations, where only a subset
 of demands is metered --- the learned component is additionally
 expected to impute the missing demand information. The two components
@@ -65,8 +65,8 @@ repair fixes whatever remains. We show that this assumption fails.
 In a controlled study of a sparse-input TE system on a
 1{,}584-satellite Starlink constellation with real traffic dynamics,
 we find that the repair layer \emph{absorbs} the learning signal:
-repair behaves as a switch rather than a dial --- a single ADMM step
-collapses the training gain from $+28\%$ to zero and further steps
+repair behaves as a switch rather than a dial --- a single repair sweep
+collapses the training gain from $+28\%$ to zero and further sweeps
 change nothing --- so with repair present a trained network is
 indistinguishable from an untrained one (9/25 paired wins, and a
 $95\%$ interval on the paired gain that rules out any improvement
@@ -79,6 +79,13 @@ $\rho = 0.02$, where two of three seeds still improve. The learned system's rema
 zero-filling is stability --- lower variance and better worst-case
 maximum link utilization --- rather than median performance. A
 one-third-scale constellation instance reproduces the same mechanism.
+Finally, we show that this repair layer --- inherited from the
+fully-observed setting it was designed for --- silently consults the
+\emph{ground-truth} traffic matrix to rank congested paths, information a
+sparsely-measuring controller does not have. Restricting repair to the
+observation it can actually see removes much of its advantage, which
+moves the operative question from whether learning helps to which
+component is allowed to see the traffic.
 These findings redraw the boundary of where learned TE adds value and
 yield concrete guidance for combining learning with feasibility
 repair.
@@ -86,7 +93,7 @@ repair.
 
 \begin{IEEEkeywords}
 Satellite networks, traffic engineering, sparse measurement, graph neural
-networks, convex repair, mechanism analysis.
+networks, constraint repair, mechanism analysis.
 \end{IEEEkeywords}}
 
 \maketitle
@@ -100,8 +107,5 @@ networks, convex repair, mechanism analysis.
 \input{sections/04-design}
 \input{sections/05-evaluation}
 \input{sections/06-conclusion}
-
-\bibliographystyle{IEEEtran}
-\bibliography{refs}
 
 \end{document}
