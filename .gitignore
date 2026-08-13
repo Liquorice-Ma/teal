@@ -183,6 +183,9 @@ paper/*.fls
 paper/*.fdb_latexmk
 paper/*.synctex.gz
 
+# reference paper PDFs (do not commit copyrighted third-party papers)
+/*.pdf
+
 # experiment runtime artifacts
 run/logs/
 run/.exp-done

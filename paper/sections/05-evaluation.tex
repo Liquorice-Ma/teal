@@ -192,12 +192,23 @@ repair-backed training clearly helps is itself the finding.
     \end{tabular}
 \end{table}
 
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figs/saturation.pdf}
+    \caption{Repair acts as a switch: median MLU at $\rho=0.3$ as the
+    repair budget grows (3 seeds; the 2-sweep plateau sits between the
+    two rightmost points and is reported in \cref{tab:saturation}). A
+    single sweep collapses both curves onto the same plateau, erasing the
+    $+28\%$ training gain visible at budget zero.}
+    \label{fig:saturation}
+\end{figure}
+
 \textbf{Repair acts as a switch, not a dial.} To establish that repair
 is what erases the learned signal --- rather than merely coinciding with
 its absence --- we sweep the repair budget from zero upward with
-everything else held fixed. \Cref{tab:saturation} reports both the
-absolute medians and the paired training gain at each budget, and the
-two tell opposite stories. In \emph{absolute} terms repair is enormously
+everything else held fixed. \Cref{fig:saturation} and
+\cref{tab:saturation} report both the absolute medians and the paired
+training gain at each budget, and the two tell opposite stories. In \emph{absolute} terms repair is enormously
 valuable: it lowers the median MLU from $2.83$ to $1.60$, a $44\%$
 improvement that no amount of training comes close to --- though
 \cref{sec:deployable} will show that part of this figure is the
@@ -270,13 +281,13 @@ particularly bad allocations that training corrects).
 With repair present, the trained system's advantage over the standard
 zero-fill baseline is real but modest in the median: 17 wins in
 25 paired cells (one-sided $p=0.054$). The robust
-advantage lies in the \emph{tails}. \Cref{tab:stability} reports the
-seed spread and the worst-case MLU per $\rho$: the trained system has
-the smaller spread at all five observability levels and the better worst
-case at four of five, with the margin widening as sparsity grows ---
-$+38.0\%$ at $\rho=0.02$, where zero-filling's worst seed
-degrades to 2.734 while the trained system stays at
-1.694. Learned mask embeddings act as a calibrated prior that
+advantage lies in the \emph{tails}. \Cref{tab:stability} and
+\cref{fig:stability} report the seed spread and the worst-case MLU per
+$\rho$: the trained system has the smaller spread at all five
+observability levels and the better worst case at four of five, with the
+margin widening as sparsity grows --- $+38.0\%$ at $\rho=0.02$, where
+zero-filling's worst seed degrades to 2.734 while the trained system
+stays at 1.694. Learned mask embeddings act as a calibrated prior that
 protects against unlucky demand--seed combinations, which is precisely
 the property a controller needs under telemetry degradation.
 
@@ -302,6 +313,17 @@ the property a controller needs under telemetry degradation.
         \bottomrule
     \end{tabular}
 \end{table}
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figs/stability.pdf}
+    \caption{Where learning still pays: per-$\rho$ MLU with repair on
+    (markers = median, whiskers = min--max over 5 seeds). The trained
+    system's whiskers are tighter at every $\rho$ and its worst case is
+    markedly better as sparsity grows --- the stability advantage that
+    survives repair.}
+    \label{fig:stability}
+\end{figure}
 
 A subtler competitor is the neighbor-aware fill (\emph{nbr},
 \cref{sec:mask-embed}): overall the trained system wins only
@@ -348,8 +370,9 @@ To test whether absorption depends on constellation scale, we replicate
 the decisive cells on a one-third-scale instance of the same Shell-1
 architecture (528 satellites, 2{,}112 ISLs, 93 traffic snapshots,
 demand density ${\sim}10\times$ higher per node pair).
-\Cref{tab:cross-scale} reports the trained/untrained pairing with and
-without repair at $\rho \in \{0.3, 0.05\}$.
+\Cref{tab:cross-scale} and \cref{fig:crossscale} report the
+trained/untrained pairing with and without repair at
+$\rho \in \{0.3, 0.05\}$.
 
 \textbf{Absorption replicates.} With repair enabled, training again
 fails to establish a consistent direction: it takes 3 of 6 paired cells,
@@ -401,6 +424,106 @@ stronger form of the core finding: absorption is \emph{global}
     \end{tabular}
 \end{table}
 
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figs/crossscale.pdf}
+    \caption{The learning peak shifts with scale, not vanishes. Without
+    repair, the paired training gain on the 528-satellite instance peaks
+    at $\rho=0.05$ ($+24.4\%$), whereas on the main 1{,}584-satellite
+    constellation it peaks at $\rho=0.3$ ($+28.1\%$). Absorption is
+    global; the no-repair boundary is local.}
+    \label{fig:crossscale}
+\end{figure}
+
+\subsection{Does Absorption Reproduce on a Different Architecture?}
+\label{sec:arch-transfer}
+
+A natural worry is that absorption is a quirk of our particular model
+rather than a property of the repair layer. We test this by re-running
+the paired protocol on the closest prior sparse-input TE architecture,
+TEST~\cite{test}: zero-filling for unobserved demands, a Transformer
+over the observation history, and an ungated GCN over the topology
+(\texttt{--mask-mode zero --no-gate --hist-len 3}). This is the
+combination our ablations deliberately omit --- zero-fill plus
+Transformer plus no mask-aware gate --- and it isolates the mask-aware
+design as the only structural difference from \sysname{}.
+
+\Cref{tab:arch-transfer} reports the four decisive cells. The contrast
+with \cref{sec:rq1} is stark. Under repair at $\rho=0.3$, where
+\sysname{} is fully absorbed (trained $\approx$ untrained, 9/25 paired
+wins), the TEST-style architecture is \emph{not} absorbed: training
+wins $2/3$ seeds with a $+8\%$ median gain. Without repair the two
+architectures agree --- training helps strongly ($+17\%$, $3/3$) --- so
+the divergence is specifically in how repair interacts with the learned
+policy, not in whether learning helps at all.
+
+\begin{table}[t]
+    \caption{Does absorption reproduce on a different architecture?
+    TEST-style baseline (zero-fill + Transformer + ungated GCN,
+    \cite{test}) under the same protocol: median MLU and paired gain
+    over 3 seeds. Unlike \sysname{} (\cref{sec:rq1}), training retains
+    value under repair.}
+    \label{tab:arch-transfer}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{@{}llcccc@{}}
+        \toprule
+        $\rho$ & Repair & Trained & Untrained & Gain & Wins \\
+        \midrule
+        0.3  & on  & 1.57 & 1.71 & $+8\%$  & 2/3 \\
+        0.3  & off & 2.14 & 2.59 & $+17\%$ & 3/3 \\
+        0.05 & on  & 1.57 & 1.58 & $+2\%$  & 2/3 \\
+        0.05 & off & 2.14 & 2.55 & $+14\%$ & 3/3 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{Absorption is architecture-specific.} On a mask-unaware
+architecture the untrained control is unstable --- seed spread at
+$\rho=0.3$ under repair spans $1.56$ to $1.89$, against the trained
+control's tight $1.57$--$1.57$ --- so training retains value as a
+stabiliser even when repair is on. On our mask-aware model the untrained
+control is already competent (a random gate produces trivial imputation
+that oracle repair handles well), so training and untraining converge
+under repair. Absorption is therefore not a universal property of
+constraint-repair layers; it arises where the learned component and
+repair solve the same imputation subproblem, so repair subsumes the
+policy.
+
+\begin{table}[t]
+    \caption{Which component drives absorption? A $2{\times}2$ ablation
+    at $\rho=0.3$ under oracle repair (3 seeds, paired wins / median
+    gain). The mask-aware gate, not the learnable placeholder,
+    determines whether absorption occurs: every gate-on cell absorbs,
+    every gate-off cell does not.}
+    \label{tab:arch-ablation}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{6pt}
+    \begin{tabular}{@{}lcc@{}}
+        \toprule
+        Fill strategy & gate on & gate off \\
+        \midrule
+        embed (placeholder)  & $0/3,\ {-2\%}$  & $2/3,\ {+2\%}$ \\
+        zero (no placeholder) & $0/3,\ {-14\%}$ & $2/3,\ {+8\%}$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{The gate drives absorption.} \Cref{tab:arch-ablation} isolates
+the component. Holding the fill strategy fixed, turning the gate on
+flips a non-absorbing cell ($2/3$ wins, $+2\%$ to $+8\%$) into an
+absorbing one ($0/3$, $-2\%$ to $-14\%$); holding the gate fixed,
+swapping the learnable placeholder for zero-fill changes the magnitude
+but never the verdict. The mask-aware gate is what creates the overlap
+with repair: with the gate, the policy's routing is
+observation-conditioned, so oracle repair --- which also conditions on
+the true demands --- subsumes it; without the gate, the policy routes
+mask-agnostically and retains value repair cannot replicate. Absorption
+is thus a property of mask-aware routing under oracle repair, not of
+the repair layer or the placeholder alone.
+
 \subsection{Inference Latency}
 \label{sec:runtime}
 
@@ -435,7 +558,7 @@ information available to repair varies. The ordering is unambiguous:
 repair remains worth having when fed the observation --- neighbour-filled
 repair still cuts median MLU from $2.83$ to $1.74$ --- but it is
 markedly weaker than the oracle version at $1.60$, and zero-filled
-repair is weaker still. A substantial part of what looked like the power
+repair is weaker still at $2.30$. A substantial part of what looked like the power
 of \emph{repair} in \cref{sec:rq1} is in fact the power of the
 \emph{ground-truth matrix} that repair was quietly reading.
 
@@ -452,16 +575,30 @@ of \emph{repair} in \cref{sec:rq1} is in fact the power of the
         Repair setting & Matrix repair reads & Median MLU \\
         \midrule
         none              & ---                        & 2.833 \\
-        \textsc{obs-zero} & observation, zeros elsewhere & \todo{fill} \\
+        \textsc{obs-zero} & observation, zeros elsewhere & 2.295 \\
         \textsc{obs-nbr}  & observation, neighbour fill  & 1.740 \\
         \textsc{oracle}   & ground truth                 & 1.599 \\
         \bottomrule
     \end{tabular}
 \end{table}
 
-\textbf{Does learning matter again?} \todo{fill from
-deployable\_repair.csv: trained vs untrained under obs-nbr and obs-zero
-across rho, paired wins and gains}
+\textbf{Does learning matter again?} Removing the oracle does not
+cleanly restore learning's value. Under \textsc{obs-nbr} repair, the
+trained policy wins $2/3$ seeds at $\rho{=}0.1$ ($+1\%$ median gain)
+and $\rho{=}0.5$ ($+6\%$), yet loses at $\rho{=}0.3$ ($-8\%$,
+$0/3$) and $\rho{=}0.05$ ($-9\%$, $1/3$). Under \textsc{obs-zero}
+repair, training wins decisively at $\rho{=}0.05$ ($+18\%$, $3/3$)
+but is flat at $\rho{=}0.3$ ($-1\%$, $1/3$). The absorption of
+\cref{sec:rq1} is therefore \emph{partly} an oracle artifact---at
+$\rho{=}0.1$ and $0.5$ learning helps once repair reads only the
+observation---but it is not fully explained by the oracle: at
+$\rho{=}0.3$, the densest point we test, training still does not help
+even when repair is denied the ground truth. The contrast at
+$\rho{=}0.05$ sharpens the point: under weak \textsc{obs-zero} repair
+training helps ($+18\%$), yet under the stronger \textsc{obs-nbr}
+repair it does not ($-9\%$) --- so it is the repair step's structural
+rebalancing, not the oracle alone, that absorbs the policy's
+contribution where repair is strong.
 
 \subsection{Takeaways}
 \label{sec:takeaways}
@@ -488,8 +625,9 @@ across rho, paired wins and gains}
     sparsely-measuring controller cannot run.
     \item \textbf{Scope of \cref{sec:rq1,sec:rq3}.} Those results
     characterize the oracle-fed configuration, which is what current
-    systems inherit and report --- so they are a diagnosis of the
-    prevailing \emph{evaluation protocol}, not a prediction about a
-    deployable controller. Both readings matter, and conflating them is
-    how the absorption effect stayed invisible.
+    systems inherit and report. The deployable variant
+    (\cref{sec:deployable}) softens but does not erase absorption --- a
+    residual remains at high $\rho$ --- so the oracle measurements are
+    best read as an upper bound on absorption, not a deployable forecast.
+    Conflating the two readings is how the effect stayed invisible.
 \end{itemize}

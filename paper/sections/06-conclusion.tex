@@ -10,8 +10,11 @@ further sweeps change nothing --- leaving a trained network
 indistinguishable from random initialization (9/25 paired wins on a
 1{,}584-satellite Starlink constellation, with a $95\%$ interval on the
 paired gain that rules out any improvement beyond $0.6\%$; 3/6 on a
-one-third-scale instance). The absorption is global: it persists across
-observability levels, random seeds, and constellation scales.
+one-third-scale instance). The absorption is global across observability
+levels, random seeds, and constellation scales, but
+architecture-specific: it does not reproduce on a mask-unaware baseline
+(\cref{sec:arch-transfer}), which refines its scope to the mask-aware
+design rather than the repair layer alone.
 
 Without repair, learning is effective across the entire observability
 range tested (13/15 paired wins, $\rho \in [0.02, 0.5]$), but the
@@ -32,11 +35,13 @@ observation costs it a substantial part of its advantage, which
 separates two things the literature reports as one: the repair
 \emph{algorithm} and the repair \emph{information}.
 
-This distinction also fixes the scope of our results. The absorption
-measurements characterize the oracle-fed configuration --- the one
-current systems inherit and report --- so they are best read as a
-diagnosis of an evaluation protocol rather than a forecast for a
-deployable controller. Both readings are useful, and conflating them is
+This distinction also fixes the scope of our results. The absorption is
+largely an artifact of the oracle-fed configuration current systems
+inherit and report: the oracle variant systematically overstates it,
+and a residual absorption persists even when repair reads only the
+observation at high $\rho$ (\cref{sec:deployable}), so the effect is
+not purely informational. The prevailing evaluation protocol amplifies
+it, and conflating the protocol diagnosis with a deployable forecast is
 precisely how the effect stayed invisible.
 
 The guidance follows directly. For evaluation, learned TE systems paired

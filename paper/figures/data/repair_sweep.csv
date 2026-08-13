@@ -1,0 +1,13 @@
+config,admm,rho,seed,mlu
+untrained,1,0.3,0,1.5814
+untrained,5,0.3,0,1.5262
+untrained,1,0.3,1,1.7373
+untrained,1,0.3,2,1.5973
+untrained,5,0.3,2,1.5986
+untrained,5,0.3,1,1.7475
+ours,1,0.3,0,1.6342
+ours,5,0.3,0,1.6221
+ours,5,0.3,2,1.7606
+ours,1,0.3,2,1.7643
+ours,5,0.3,1,1.6487
+ours,1,0.3,1,1.6549
