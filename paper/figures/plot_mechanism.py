@@ -235,14 +235,14 @@ def main():
 
     # ---- fig: RQ3 stability (worst-case + spread, repair on) ----
     fig, ax = plt.subplots(figsize=(3.5, 2.3))
-    for rho, offst in zip(RHOS, [-0.015, 0.015]):
+    for rho in RHOS:
         tr_vals = series(on_train, rho, seeds5)
         un_vals = series(on_untrain, rho, seeds5)
-        ax.errorbar([rho + offst], [median(tr_vals)],
+        ax.errorbar([rho * 0.9], [median(tr_vals)],
                     yerr=[[median(tr_vals) - min(tr_vals)],
                           [max(tr_vals) - median(tr_vals)]],
                     fmt="o-", color=C_TRAIN, capsize=2, ms=4)
-        ax.errorbar([rho + offst], [median(un_vals)],
+        ax.errorbar([rho * 1.1], [median(un_vals)],
                     yerr=[[median(un_vals) - min(un_vals)],
                           [max(un_vals) - median(un_vals)]],
                     fmt="s--", color=C_UNTRAIN, capsize=2, ms=4)
