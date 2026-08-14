@@ -50,10 +50,10 @@ inference. In parallel, FNC~\cite{fnc,fnc-infocom} targets dynamic traffic
 allocation for earth-observation constellations, replacing RL with
 end-to-end imitation learning and substituting iterative constraint solvers
 with normalization-based feasibility layers. Notably, FNC's imitation
-learning constructs its expert supervision by solving an offline optimum
-over the \emph{fully realized} demands of each episode --- a paradigm that
-fundamentally requires complete post-hoc observability, which is unavailable
-under sparse measurement. Both SaTE and FNC, like their WAN counterparts,
+learning requires expert demonstrations, and the TE expert is an optimal
+allocation whose computation needs the complete demand matrix of each
+episode --- a paradigm that fundamentally requires complete post-hoc
+observability, which is unavailable under sparse measurement. Both SaTE and FNC, like their WAN counterparts,
 assume the traffic matrix is fully observable at decision time.
 
 \subsection{TE with Incomplete Traffic Observations}

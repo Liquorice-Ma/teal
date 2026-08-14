@@ -72,13 +72,13 @@ mask-aware gated message passing, temporal-spatial cross-attention,
 and a constraint-repair layer (\cref{sec:design}). We conduct a controlled
 mechanism study of \sysname{} on a
 1{,}584-satellite Starlink constellation (Shell-1 configuration) driven
-by real traffic dynamics, holding the architecture fixed and sweeping
+by population-based traffic dynamics, holding the architecture fixed and sweeping
 observability $\rho$, the repair budget, training status, and random
 seeds. \textbf{(RQ1) Does learning contribute when repair is present?}
 No. The repair layer \emph{absorbs} the learning signal, and it does so
 as a \emph{switch} rather than a dial: a single repair sweep collapses the
 training gain from $+28.1\%$ to $-3.3\%$, and two or five sweeps change
-nothing further. Once that repair is in place a trained network is
+nothing further. Once that oracle-fed repair is in place, a trained network is
 indistinguishable from an untrained one (9 of 25 paired snapshots won;
 sign test $p=0.115$ in the untrained direction, and a $95\%$ interval
 on the paired gain of $[-5.5\%, +0.6\%]$ that rules out any improvement

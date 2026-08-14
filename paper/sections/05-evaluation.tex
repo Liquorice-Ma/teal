@@ -101,6 +101,45 @@ need not agree --- not even in sign --- when seed-level rankings
 disagree; we therefore treat the paired statistic as authoritative and
 report medians only for reference.
 
+\begin{table}[t]
+    \caption{Model and training hyperparameters (defaults held fixed
+    across all $\rho$ and seeds).}
+    \label{tab:hparams}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{@{}ll@{}}
+        \toprule
+        Parameter & Value \\
+        \midrule
+        FlowGNN layers $\Lambda$ & 6 \\
+        Candidate paths $\kappa$ & 4 \\
+        Temporal $d_{\mathrm{model}}$ / heads / layers & 16 / 2 / 1 \\
+        Fusion dim $d_{\mathrm{fuse}}$ & 8 \\
+        History length $L$ & 3 \\
+        COMA samples per update & 30 \\
+        Mask-embedding init & 57.0 (median nonzero demand) \\
+        \midrule
+        Learning rate & $1\!\times\!10^{-4}$ \\
+        Epochs (warmup / early stop) & 60 (4 / on) \\
+        Restart screening & 3 inits \\
+        Batch size & 20 \\
+        Untrained control & 0 epochs, 1 init \\
+        Repair budget (deployed) & 2 sweeps-of-ten \\
+        \midrule
+        Trainable parameters & 4{,}468 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{Implementation.} \Cref{tab:hparams} lists the
+hyperparameters, drawn from the code defaults and held fixed across all
+$\rho$ and seeds. The untrained control shares the trained model's
+random initialization and differs only in skipping gradient updates
+(\texttt{epochs${=}0$}); it is therefore a clean ablation of the
+\emph{training} factor with identical architecture, mask embedding, and
+repair layer.
+
 \subsection{RQ1: Does Learning Contribute When Repair Is Present?}
 \label{sec:rq1}
 
@@ -206,7 +245,9 @@ repair-backed training clearly helps is itself the finding.
 \textbf{Repair acts as a switch, not a dial.} To establish that repair
 is what erases the learned signal --- rather than merely coinciding with
 its absence --- we sweep the repair budget from zero upward with
-everything else held fixed. \Cref{fig:saturation} and
+everything else held fixed, at $\rho{=}0.3$ --- a representative
+mid-range observability level and the one reused throughout the
+architecture analyses of \cref{sec:arch-transfer}. \Cref{fig:saturation} and
 \cref{tab:saturation} report both the absolute medians and the paired
 training gain at each budget, and the two tell opposite stories. In \emph{absolute} terms repair is enormously
 valuable: it lowers the median MLU from $2.83$ to $1.60$, a $44\%$
@@ -279,9 +320,9 @@ particularly bad allocations that training corrects).
 \label{sec:rq3}
 
 With repair present, the trained system's advantage over the standard
-zero-fill baseline is real but modest in the median: 17 wins in
-25 paired cells (one-sided $p=0.054$). The robust
-advantage lies in the \emph{tails}. \Cref{tab:stability} and
+zero-fill baseline is marginal in the median: 17 wins in
+25 paired cells (one-sided $p=0.054$, just shy of significance).
+The robust advantage lies in the \emph{tails}. \Cref{tab:stability} and
 \cref{fig:stability} report the seed spread and the worst-case MLU per
 $\rho$: the trained system has the smaller spread at all five
 observability levels and the better worst case at four of five, with the
