@@ -126,7 +126,8 @@ def benchmark(problems, output_csv, arg):
         teal_env=teal_env,
         teal_actor=teal_actor,
         lr=lr,
-        early_stop=early_stop)
+        early_stop=early_stop,
+        eval_admm_steps=num_admm_step)
 
     # ========== train and test
     teal.train(

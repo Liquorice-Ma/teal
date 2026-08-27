@@ -18,7 +18,8 @@ from .utils import print_
 
 
 class Teal():
-    def __init__(self, teal_env, teal_actor, lr, early_stop):
+    def __init__(self, teal_env, teal_actor, lr, early_stop,
+                 eval_admm_steps=0):
         """Initialize Teal model.
 
         Args:
@@ -26,6 +27,8 @@ class Teal():
             num_layer: number of flowGNN layers
             lr: learning rate
             early_stop: whether to early stop
+            eval_admm_steps: repair budget used consistently by validation
+                and testing when selecting trained checkpoints
         """
 
         self.env = teal_env
@@ -40,6 +43,10 @@ class Teal():
 
         # early stop when val result no longer changes
         self.early_stop = early_stop
+        # Model selection must evaluate the same end-to-end pipeline used at
+        # test time. Otherwise checkpoints are ranked without repair even
+        # when the deployed metric includes repair.
+        self.eval_admm_steps = eval_admm_steps
         # best validation objective seen so far (for model checkpointing)
         self.best_val = None
         self.best_state = None
@@ -194,8 +201,10 @@ class Teal():
             obs = self.env.get_obs()
             # get action
             raw_action = self.actor.act(obs)
-            # get reward
-            reward, info = self.env.step(raw_action)
+            # Evaluate the same end-to-end protocol used during testing,
+            # including the configured repair budget.
+            reward, info = self.env.step(
+                raw_action, num_admm_step=self.eval_admm_steps)
             # show satisfied demand instead of total flow
             rewards += reward.item()/problem_dict['total_demand']\
                 if self.env.obj == 'total_flow' else reward.item()

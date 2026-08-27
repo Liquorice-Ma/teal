@@ -11,11 +11,23 @@
 \usepackage{algorithm}
 \usepackage{algpseudocode}
 \usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,backgrounds}
 \usepackage[colorlinks=true,linkcolor=blue,citecolor=blue,urlcolor=blue]{hyperref}
 \usepackage{cleveref}
+% 图表/公式引用统一为大写缩写格式：Fig. 1 / Table 1 / Eq. (7)
+\crefname{figure}{Fig.}{Figs.}
+\Crefname{figure}{Fig.}{Figs.}
+\crefname{table}{Table}{Tables}
+\Crefname{table}{Table}{Tables}
+\crefname{equation}{Eq.}{Eqs.}
+\Crefname{equation}{Eq.}{Eqs.}
+\crefname{section}{Section}{Sections}
+\Crefname{section}{Section}{Sections}
+\creflabelformat{equation}{(#2#1#3)}
 
 % ==== macros ====
-\newcommand{\sysname}{SiTE\xspace}
+\newcommand{\sysname}{SpaTE\xspace}
 \usepackage{xspace}
 % 审稿修改标记（定稿删除）
 \newcommand{\todo}[1]{\textcolor{red}{[TODO: #1]}}
@@ -27,7 +39,8 @@
 
 \begin{document}
 
-\title{When Repair Absorbs Learning: Repair, Information Access, and Sparse-Observation Traffic Engineering in LEO Constellations}
+\title{\sysname: Learning-Based Traffic Engineering under Sparse Traffic
+Observation in LEO Satellite Constellations}
 
 \author{%
     Linhui~Wei,
@@ -49,52 +62,41 @@
 }
 
 \markboth{IEEE Transactions on Network Science and Engineering}
-{Wei \MakeLowercase{\textit{et al.}}: When Repair Absorbs Learning: Repair, Information Access, and Sparse-Observation Traffic Engineering in LEO Constellations}
+{Wei \MakeLowercase{\textit{et al.}}: \sysname: Learning-Based Traffic Engineering under Sparse Traffic Observation in LEO Satellite Constellations}
 
 % compsoc 模式：摘要与关键词包进 title-abstract-index 块
 \IEEEtitleabstractindextext{%
 \begin{abstract}
-Learning-based traffic engineering (TE) systems increasingly pair a
-neural allocator with a repair layer that restores allocations to
-feasibility, and under sparse traffic observation --- the
-norm in low-Earth-orbit satellite constellations, where only a subset
-of demands is metered --- the learned component is additionally
-expected to impute the missing demand information. The two components
-are tacitly assumed to compose: learning refines the allocation and
-repair fixes whatever remains. We show that this assumption fails.
-In a controlled study of a sparse-input TE system on a
-1{,}584-satellite Starlink constellation with population-driven traffic
-dynamics,
-we find that the repair layer \emph{absorbs} the learning signal:
-repair behaves as a switch rather than a dial --- a single repair sweep
-collapses the training gain from $+28\%$ to zero and further sweeps
-change nothing --- so under the oracle-fed repair current systems inherit, a trained
-network is indistinguishable from an untrained one (9/25 paired wins, and a
-$95\%$ interval on the paired gain that rules out any improvement
-beyond $0.6\%$).
-Learning pays off only in a repair-free regime, but does so across
-the entire observability range tested (13/15 paired wins,
-$\rho \in [0.02, 0.5]$), peaking at $+28.1\%$
-at $\rho = 0.3$; no collapse boundary exists even at
-$\rho = 0.02$, where two of three seeds still improve. The learned system's remaining edge over
-zero-filling is stability --- lower variance and better worst-case
-maximum link utilization --- rather than median performance. A
-one-third-scale constellation instance reproduces the same mechanism.
-Finally, we show that this repair layer --- inherited from the
-fully-observed setting it was designed for --- silently consults the
-\emph{ground-truth} traffic matrix to rank congested paths, information a
-sparsely-measuring controller does not have. Restricting repair to the
-observation it can actually see removes much of its advantage, which
-moves the operative question from whether learning helps to which
-component is allowed to see the traffic.
-These findings redraw the boundary of where learned TE adds value and
-yield concrete guidance for combining learning with feasibility
-repair.
+Low-Earth-orbit (LEO) satellite constellations require traffic
+engineering (TE) that allocates traffic within milliseconds over a
+network whose topology and demand shift continuously. Existing
+learning-based TE systems achieve this speed, but they assume a
+complete traffic matrix as input, whereas onboard resource limits and
+telemetry downlink costs mean a constellation controller can meter only
+a small fraction of demands at each decision epoch. Under such sparse
+observation, completing the matrix with simple zero or mean filling
+degrades allocation quality, and the feasibility-repair step that these
+systems inherit implicitly reads traffic information unavailable to a
+deployable controller. This paper presents \sysname, a sparse-aware
+traffic engineering system that jointly designs the learned allocator
+and the repair layer around the observation actually available.
+\sysname represents unobserved demands with a learnable mask embedding
+rather than fabricated values, propagates link state through a
+mask-aware gated graph neural network, encodes the history of sparse
+observations with a temporal Transformer, and drives repair with a
+neighbor-based demand estimate computed purely from the observation.
+On a 1{,}584-satellite Starlink constellation with population-driven
+traffic dynamics, \sysname achieves lower maximum link utilization than
+zero-filling, mean-interpolation, and TEST-style baselines across
+observation ratios from $2\%$ to $50\%$
+(\todo{median improvement from overall\_main.csv}), while retaining
+millisecond-level inference and transferring across constellation
+scales without retraining.
 \end{abstract}
 
 \begin{IEEEkeywords}
-Satellite networks, traffic engineering, sparse measurement, graph neural
-networks, constraint repair, mechanism analysis.
+LEO satellite constellation, traffic engineering, sparse traffic
+measurement, maximum link utilization (MLU), graph neural networks.
 \end{IEEEkeywords}}
 
 \maketitle

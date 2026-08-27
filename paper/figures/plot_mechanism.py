@@ -13,10 +13,10 @@ The script asserts the plotted medians against the numbers quoted in
 05-evaluation.tex (tab:rq1-strat and the RQ2 narrative) so the figures
 cannot silently drift from the text.
 
-X axis: true log spacing over rho in {0.02, 0.05, 0.1, 0.3, 0.5}, but with a
-FixedLocator at exactly those five values and minor ticks disabled -- the
-default LogFormatter labels every minor tick (2e-2, 3e-2, 4e-2, ...) which
-overlaps into an unreadable band.
+X axis: EQUAL spacing over rho in {0.02, 0.05, 0.1, 0.3, 0.5} -- the five
+levels are plotted at categorical positions 0..4 with the rho values as tick
+labels, so adjacent levels are equidistant regardless of their numeric ratio
+(a log axis makes 0.02-0.05 wider than 0.3-0.5, which reads wrong).
 """
 
 import csv
@@ -26,13 +26,13 @@ from statistics import median, stdev
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from matplotlib.ticker import FixedLocator, NullLocator
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 DATA = os.path.join(HERE, "data")
 OUT = os.path.normpath(os.path.join(HERE, "..", "figs"))
 
 RHOS = [0.02, 0.05, 0.1, 0.3, 0.5]
+XPOS = list(range(len(RHOS)))  # equal-spaced categorical positions
 
 plt.rcParams.update({
     "font.family": "serif",
@@ -91,11 +91,9 @@ def series(cell, rho, seeds):
 
 
 def style_ax(ax):
-    ax.set_xscale("log")
-    ax.xaxis.set_major_locator(FixedLocator(RHOS))
-    ax.xaxis.set_minor_locator(NullLocator())  # the actual fix
+    ax.set_xticks(XPOS)
     ax.set_xticklabels([f"{r:g}" for r in RHOS])
-    ax.set_xlim(0.017, 0.62)
+    ax.set_xlim(-0.35, len(RHOS) - 0.65)
     ax.grid(True, which="major")
     ax.set_xlabel(r"Observability $\rho$")
 
@@ -154,8 +152,8 @@ def main():
     # ---- teaser: paired training gain, repair on vs off ----
     fig, ax = plt.subplots(figsize=(3.5, 2.3))
     ax.axhline(0, color="0.4", lw=0.8, zorder=1)
-    ax.plot(RHOS, gain_off, "o-", color=C_OFF, label="Repair off (learning visible)")
-    ax.plot(RHOS, gain_on, "s--", color=C_ON, label="Repair on (absorbed)")
+    ax.plot(XPOS, gain_off, "o-", color=C_OFF, label="Repair off (learning visible)")
+    ax.plot(XPOS, gain_on, "s--", color=C_ON, label="Repair on (absorbed)")
     style_ax(ax)
     ax.set_ylabel("Paired training gain (%)")
     ax.set_ylim(-9, 33)
@@ -164,8 +162,8 @@ def main():
 
     # ---- rq1: median MLU with repair on, trained vs untrained ----
     fig, ax = plt.subplots(figsize=(3.5, 2.3))
-    ax.plot(RHOS, med_train, "o-", color=C_TRAIN, label="Trained")
-    ax.plot(RHOS, med_untrain, "s--", color=C_UNTRAIN, label="Untrained")
+    ax.plot(XPOS, med_train, "o-", color=C_TRAIN, label="Trained")
+    ax.plot(XPOS, med_untrain, "s--", color=C_UNTRAIN, label="Untrained")
     style_ax(ax)
     ax.set_ylabel("Median MLU (repair on)")
     ax.set_ylim(1.49, 1.88)
@@ -175,12 +173,12 @@ def main():
     # ---- rq2: repair-off per-seed gains + median ----
     fig, ax = plt.subplots(figsize=(3.5, 2.3))
     ax.axhline(0, color="0.4", lw=0.8, zorder=1)
-    for rho in RHOS:
+    for i, rho in enumerate(RHOS):
         ys = [(off_untrain[(rho, s)] - off_train[(rho, s)])
               / off_untrain[(rho, s)] * 100 for s in seeds3]
-        ax.plot([rho] * len(ys), ys, "o", color=C_OFF, alpha=0.45,
+        ax.plot([i] * len(ys), ys, "o", color=C_OFF, alpha=0.45,
                 markersize=3.5, zorder=2)
-    ax.plot(RHOS, gain_off, "o-", color=C_OFF, label="Median paired gain",
+    ax.plot(XPOS, gain_off, "o-", color=C_OFF, label="Median paired gain",
             zorder=3)
     style_ax(ax)
     ax.set_ylabel("Paired training gain (%)")
@@ -235,14 +233,14 @@ def main():
 
     # ---- fig: RQ3 stability (worst-case + spread, repair on) ----
     fig, ax = plt.subplots(figsize=(3.5, 2.3))
-    for rho in RHOS:
+    for i, rho in enumerate(RHOS):
         tr_vals = series(on_train, rho, seeds5)
         un_vals = series(on_untrain, rho, seeds5)
-        ax.errorbar([rho * 0.9], [median(tr_vals)],
+        ax.errorbar([i - 0.08], [median(tr_vals)],
                     yerr=[[median(tr_vals) - min(tr_vals)],
                           [max(tr_vals) - median(tr_vals)]],
                     fmt="o-", color=C_TRAIN, capsize=2, ms=4)
-        ax.errorbar([rho * 1.1], [median(un_vals)],
+        ax.errorbar([i + 0.08], [median(un_vals)],
                     yerr=[[median(un_vals) - min(un_vals)],
                           [max(un_vals) - median(un_vals)]],
                     fmt="s--", color=C_UNTRAIN, capsize=2, ms=4)

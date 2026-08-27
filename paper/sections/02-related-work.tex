@@ -1,8 +1,7 @@
 \section{Related Work}
 \label{sec:related}
 
-% 迁移自 docs/related_work.md；LMTE venue 未定暂不引用；
-% FIGRET/NetLLM 已入 bib（author 待核对）
+% 迁移自 docs/related_work.md；bib 条目已全部核实（2026-08）。
 
 \subsection{ML-Driven Traffic Engineering for WANs}
 
@@ -21,10 +20,13 @@ with orders-of-magnitude speedups; FIGRET~\cite{figret} enhances robustness
 against traffic uncertainty at per-flow granularity. To survive topology
 changes without retraining, HARP~\cite{harp} enforces invariances to node
 permutation and tunnel reordering, transferring across topologies unseen in
-training. More recently, large language models have been explored as
+training; Aether~\cite{aether2025} pursues the same generality with elastic
+multi-agent graph transformers, and path-based GNNs have been trained for
+robust distributed TE under link failures~\cite{ye2025}. More recently,
+large language models have been explored as
 general-purpose traffic planners~\cite{netllm}. However, all of these
 systems assume the \emph{complete} traffic matrix is available at decision
-time --- an assumption that rarely holds in large-scale satellite networks,
+time, an assumption that rarely holds in large-scale satellite networks,
 where network-wide measurement is prohibitively expensive.
 
 \subsection{TE and Routing for Satellite Networks}
@@ -34,7 +36,7 @@ every few tens of milliseconds as satellites move, and control decisions
 must be produced within stringent latency
 budgets~\cite{handley2018,bhattacherjee2019,kassing2020}. Classical
 approaches
-absorb mobility through topology abstractions --- the virtual node model
+absorb mobility through topology abstractions: the virtual node model
 binds logical nodes to earth-fixed footprints so that upper-layer routing
 observes a quasi-static grid~\cite{vn2013}. Optimization-based satellite
 TE has explored segment routing~\cite{hu2022}, distributed clustering
@@ -52,7 +54,7 @@ end-to-end imitation learning and substituting iterative constraint solvers
 with normalization-based feasibility layers. Notably, FNC's imitation
 learning requires expert demonstrations, and the TE expert is an optimal
 allocation whose computation needs the complete demand matrix of each
-episode --- a paradigm that fundamentally requires complete post-hoc
+episode, a paradigm that fundamentally requires complete post-hoc
 observability, which is unavailable under sparse measurement. Both SaTE and FNC, like their WAN counterparts,
 assume the traffic matrix is fully observable at decision time.
 
@@ -61,10 +63,10 @@ assume the traffic matrix is fully observable at decision time.
 Network-wide traffic measurement is expensive: collecting a complete
 traffic matrix requires instrumenting all ingress nodes at fine time
 granularity, which is particularly onerous on resource-constrained
-satellite platforms. A classical workaround is a two-stage pipeline ---
+satellite platforms. A classical workaround is a two-stage pipeline:
 first estimate or complete the traffic matrix via network
 tomography~\cite{vardi1996,zhang2003}, matrix completion, or compressive
-sensing~\cite{zhang2009}, then optimize routing on the estimate --- but
+sensing~\cite{zhang2009}, then optimize routing on the estimate. However,
 reconstruction errors propagate to and degrade the downstream allocation.
 TEST~\cite{test} is, to our knowledge, the first end-to-end approach that
 learns routing policies directly from sparsely measured traffic matrices,
@@ -72,7 +74,7 @@ integrating a Transformer over historical sparse sequences with a GCN over
 the topology; it fills unobserved entries with zeros, compensates with
 synthesized training augmentation, and targets terrestrial networks with
 static topologies. In the graph learning literature, message passing under
-missing node features has been addressed via teacher--student
+missing node features has been addressed via teacher-student
 distillation~\cite{t2gnn}, but such techniques have not been applied to
 network TE. No prior work, to our knowledge, performs TE from sparse
 traffic observations in satellite networks, where the difficulty is
@@ -81,7 +83,7 @@ compounded by time-varying topologies and drifting demand sets.
 \subsection{Positioning}
 
 \begin{table}[t]
-    \caption{Comparison with the closest prior systems.}
+    \caption{Comparison with the related works.}
     \label{tab:related}
     \centering
     \footnotesize
@@ -96,6 +98,7 @@ compounded by time-varying topologies and drifting demand sets.
         Sparse observation      & \xmark & \xmark & \cmark & \xmark & \cmark \\
         Temporal modeling       & \xmark & \xmark & \cmark & \xmark & \cmark \\
         Mask-aware model        & \xmark & \xmark & \xmark & \xmark & \cmark \\
+        Observation-fed repair  & \xmark & \xmark & \xmark & \xmark & \cmark \\
         Demand-set drift        & \xmark & partial & \xmark & \xmark & \cmark \\
         \bottomrule
     \end{tabular}
@@ -103,10 +106,14 @@ compounded by time-varying topologies and drifting demand sets.
 
 Our work sits at the intersection of these three lines
 (\cref{tab:related}). Unlike SaTE and FNC, which assume fully observable
-demands, we perform TE from sparse observations (10\%--70\% observability).
-Unlike TEST, which fills unobserved entries with zeros and targets static
-terrestrial networks, we replace missing entries with learnable mask
-embeddings, gate their message passing, and handle LEO dynamics ---
-time-varying topologies and drifting demand-pair sets --- via demand
-pruning with size-invariant model weights, enabling train-once,
-zero-retraining deployment.
+demands, \sysname{} performs TE from sparse observations, down to a $2\%$
+observation ratio. Unlike TEST, which fills unobserved entries with zeros
+and targets static terrestrial networks, \sysname{} replaces missing
+entries with learnable mask embeddings, gates their message passing, and
+handles LEO dynamics, namely time-varying topologies and drifting
+demand-pair sets, via demand pruning with size-invariant model weights,
+enabling train-once, zero-retraining deployment. Finally, unlike all of
+the above, \sysname{} also redesigns the feasibility-repair step so that
+its rebalancing reads only an estimate computed from the observation,
+rather than the ground-truth traffic matrix that full-observation systems
+implicitly consult.

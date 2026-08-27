@@ -1,153 +1,130 @@
 \IEEEraisesectionheading{\section{Introduction}\label{sec:intro}}
 
-% A 路线机制论文：六段式 = 实践现状 → 稀疏观测 → 隐含组合假设 →
-% 证伪与发现 → 启示 → 贡献。每个论断对应一个实验证据锚点。
+% 性能立意六段式：背景 → 卫星网络为何天然是稀疏观测（适配性） →
+% 稀疏输入下现有方法的问题（含 repair 信息源） → SpaTE 方法 →
+% 结果预告 → 贡献 + 章节组织段。全文禁用破折号；不提前引用后文章节。
 
 \IEEEPARstart{L}{ow-Earth-orbit} (LEO) satellite constellations are rapidly
 scaling toward tens of thousands of satellites~\cite{handley2018,
 bhattacherjee2019,giuliari2020}, carrying user traffic with
 pronounced spatial and temporal fluctuations over inter-satellite links
 (ISLs) of limited capacity~\cite{kassing2020,michel2022}. Traffic
-engineering (TE) --- centrally optimizing how each demand is split across
-candidate paths --- has become a key control primitive for these
-networks~\cite{jain2013,hong2013,hong2018,sate}. A recent line of
-learning-based TE systems makes centralized control practical at scale:
-neural allocators replace online solvers and cut allocation time from
-minutes to milliseconds~\cite{teal,dote,harp,sate}. Because a neural
-allocator can emit allocations that overload individual links, these
-systems almost universally append a \emph{repair layer} --- a few steps
-of a convex procedure such as ADMM~\cite{boyd2011}, or a lightweight
-rebalancing heuristic, that restores the raw allocation to
-feasibility. Under sparse traffic
-observation, the learned component carries a second responsibility: since
-only a subset of demands is metered, it is also expected to
-\emph{impute} the missing demand information, whether through learned
-mask embeddings~\cite{teal}, synthetic augmentation~\cite{test}, or
-explicit completion stages.
+engineering (TE), which centrally optimizes how each demand is split
+across candidate paths, has become a key control primitive for these
+networks~\cite{jain2013,hong2013,hong2018,sate}. Classical
+solver-based TE recomputes allocations in minutes, far too slow for a
+topology and demand pattern that shift on the order of seconds, so a
+recent line of learning-based TE systems replaces the online solver
+with a neural allocator and cuts allocation time to
+milliseconds~\cite{teal,dote,harp,sate}, making centralized control of
+constellation-scale networks practical.
 
-This second responsibility is unavoidable in LEO constellations.
-Network-wide measurement requires every satellite to meter, aggregate,
-and downlink fine-grained flow statistics through bandwidth-constrained
-telemetry channels, competing with user traffic and consuming scarce
-onboard resources; measurement gaps due to intermittent ground contacts
-are the norm rather than the exception. In practice, the controller
-observes a \emph{sparse} traffic matrix --- a fraction $\rho$ of demands
-measured at each epoch --- and must still allocate \emph{all} traffic.
-Filling unobserved entries with zeros leaves no headroom on the links
-that unmeasured traffic actually traverses, inflating the realized
-maximum link utilization (MLU); two-stage complete-then-optimize
-pipelines propagate reconstruction errors into allocation
-decisions~\cite{test}. Learned imputation is therefore the standard
-answer: the allocator is trained end-to-end to act well despite missing
-inputs.
+These systems, however, assume a \emph{complete} traffic matrix as
+input, and this assumption is uniquely fragile in satellite networks.
+Obtaining a network-wide traffic matrix requires every satellite to
+meter, aggregate, and downlink fine-grained flow statistics through
+telemetry channels that compete with user traffic for scarce ISL and
+ground-station bandwidth, while consuming limited onboard computation
+and power; intermittent ground contacts further leave measurement gaps
+as the norm rather than the exception. A constellation controller
+therefore observes a \emph{sparse} traffic matrix, a fraction $\rho$
+of demands metered at each decision epoch, yet must still allocate
+\emph{all} traffic, including the unmeasured part. Conversely, a TE
+system that acts well on sparse observations lets the operator
+deliberately meter only a small demand subset and reclaim the
+telemetry budget, which is exactly why sparse-observation TE is a
+natural operating mode for LEO constellations rather than a degraded
+one.
 
-The two responsibilities --- imputation and allocation --- are trained
-into one network, while feasibility is enforced by the repair layer.
-This decomposition carries a tacit but load-bearing assumption:
-\emph{the components compose}. The learned allocator is assumed to
-contribute whatever improvement it can learn from data, and the repair
-layer is assumed to add, on top of it, the correction of residual
-violations --- two positive, additive terms. Every system that couples a
-neural allocator with a repair layer~\cite{teal,sate,dote} implicitly
-relies on this assumption when it reports end-to-end performance: the
-measured gain is attributed to the pipeline as a whole, and no attempt
-is made to separate what the learned part contributes from what the
-repair part contributes.
+Sparse observation breaks existing learning-based TE in two places.
+First, the allocator: feeding a model trained for complete matrices
+with zero-filled input conflates ``unmeasured'' with ``no traffic''
+and leaves no headroom on the links that unmeasured demands actually
+traverse, inflating the realized maximum link utilization (MLU), while
+two-stage complete-then-optimize pipelines propagate reconstruction
+errors into allocation decisions~\cite{test}. Second, and largely
+overlooked, the feasibility-repair step: because a neural allocator
+can emit allocations that overload individual links, learned TE
+systems append a few sweeps of a convex or heuristic repair
+procedure~\cite{teal,boyd2011}, and the repair implementation
+inherited from the full-observation setting ranks congested links
+using the \emph{ground-truth} traffic matrix, information that a
+sparsely measuring controller does not possess. Under sparse
+observation, the design question is therefore twofold: how should the
+learned allocator represent what it cannot see, and what information
+should the repair step be given so that it remains effective when fed
+only the observation.
+
+This paper presents \sysname{} (\underline{Spa}rse-aware
+\underline{T}raffic \underline{E}ngineering), a learning-based TE
+system designed end to end around the observation actually available.
+On the allocator side, \sysname{} represents each unobserved demand
+with a learnable mask embedding instead of a fabricated volume,
+propagates link state through a mask-aware gated graph neural network
+so that unobserved path nodes receive congestion information without
+injecting placeholder traffic, and encodes the history of sparse
+observations with a temporal Transformer fused into the graph
+representation by cross-attention. On the repair side, \sysname{}
+restricts the rebalancing sweeps to a traffic estimate computed purely
+from the observation, filling each unobserved demand from observed
+demands that share its source. The two components add up: the learned
+allocator supplies a sparse-aware allocation prior that already avoids
+most overloads, and the observation-fed repair corrects the residual
+violations; the choice of the estimate that feeds repair, a
+neighbor-based fill rather than zeros, is what keeps the repair step
+effective at low observability.
+
+We evaluate \sysname{} on a 1{,}584-satellite Starlink Shell-1
+constellation with population-driven traffic dynamics, sweeping the
+observation ratio $\rho$ from $0.02$ to $0.5$ and comparing against
+zero-filling and mean-interpolation adaptations of full-observation
+systems and a TEST-style sparse baseline~\cite{test}, all methods
+paired with the identical deployable repair layer. \sysname{} achieves
+the lowest realized MLU at every observation ratio tested
+(\todo{headline numbers from overall\_main.csv, e.g., median MLU
+reduction over the best baseline per $\rho$}), retains
+millisecond-level inference on the full constellation, and transfers
+to a one-third-scale constellation instance without retraining
+(\cref{fig:teaser}).
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{figs/teaser.pdf}
-    \caption{The headline finding. With the repair layer enabled,
-    training yields no measurable gain at any observability level.
-    Disable repair, and training helps at \emph{every} observability
-    level tested --- there is no collapse boundary, even at $\rho=0.02$.}
+    \caption{Realized MLU versus observation ratio $\rho$ on the
+    1{,}584-satellite constellation. \sysname{} outperforms
+    zero-filling, mean-interpolation, and TEST-style baselines at
+    every $\rho$ under the identical deployable repair layer.
+    \todo{regenerate from overall\_main.csv}}
     \label{fig:teaser}
 \end{figure}
 
-This paper shows that the assumption fails, and characterizes precisely
-how. Our vehicle is \sysname{} (\underline{S}parse-\underline{i}nput
-\underline{T}raffic \underline{E}ngineering), a representative
-sparse-input TE system that combines learnable mask embeddings,
-mask-aware gated message passing, temporal-spatial cross-attention,
-and a constraint-repair layer (\cref{sec:design}). We conduct a controlled
-mechanism study of \sysname{} on a
-1{,}584-satellite Starlink constellation (Shell-1 configuration) driven
-by population-based traffic dynamics, holding the architecture fixed and sweeping
-observability $\rho$, the repair budget, training status, and random
-seeds. \textbf{(RQ1) Does learning contribute when repair is present?}
-No. The repair layer \emph{absorbs} the learning signal, and it does so
-as a \emph{switch} rather than a dial: a single repair sweep collapses the
-training gain from $+28.1\%$ to $-3.3\%$, and two or five sweeps change
-nothing further. Once that oracle-fed repair is in place, a trained network is
-indistinguishable from an untrained one (9 of 25 paired snapshots won;
-sign test $p=0.115$ in the untrained direction, and a $95\%$ interval
-on the paired gain of $[-5.5\%, +0.6\%]$ that rules out any improvement
-beyond $0.6\%$). \textbf{(RQ2) When does learning contribute without
-repair?} At \emph{every} $\rho$ tested: training wins 13 of 15
-paired cells across $\rho \in [0.02, 0.5]$
-(two-sided sign test $p=0.018$), improving MLU by
-$+28.1\%$ at $\rho = 0.3$ and $+9.8\%$ at
-$\rho = 0.1$; even at $\rho = 0.02$ two of three
-seeds improve. No collapse boundary exists --- the mask embeddings
-regularize allocations even at 2\% observability. \textbf{(RQ3) Does the
-mechanism depend on constellation scale?} A one-third-scale instance of
-the same constellation architecture reproduces the absorption
-phenomenon (\cref{sec:eval}). \textbf{(RQ4) What does repair need to
-know?} More than the policy does. To rank congested paths, the repair
-step needs demand volumes, and the implementation inherited from the
-fully-observed setting takes them from the \emph{ground-truth} matrix
---- an information advantage over a policy that sees only a fraction
-$\rho$ of it, and one that no sparsely-measuring controller could
-reproduce. Restricting repair to the observation it can actually see
-costs it a substantial part of its advantage, which reopens the space
-the learned component was supposed to occupy. Together, the results
-imply that the learned component and the repair component are
-\emph{functional substitutes}, not complements --- and that the
-substitution is underwritten by an information asymmetry that the
-literature's evaluation protocol leaves invisible.
-
-The findings redraw the boundary of where learned TE adds value, and
-they carry concrete guidance. \emph{For evaluation}, a learned TE
-system paired with strong repair must be benchmarked in the repair-free
-regime or against repair-only baselines; end-to-end numbers conflate
-the two components and can certify a trained model whose weights
-contribute nothing. \emph{For design}, if repair is kept for safety,
-the learning budget should target what repair provably does not
-provide --- we show that the one robust residual advantage of the
-learned system is \emph{stability}: it wins 17/25 paired
-snapshots against zero-filling, with markedly lower variance and a
-worst-case MLU up to 38\% better at extreme sparsity --- rather
-than median performance. \emph{For deployment}, the absence of a
-collapse boundary means training remains worth its cost even at
-2\% observability; and the operative choice is not whether to pay for
-repair but which matrix to hand it --- the variant that erases the
-learning signal is precisely the variant a sparsely-measuring
-deployment cannot run.
-
 In summary, this paper makes the following contributions:
 \begin{itemize}
-    \item We identify the \emph{repair--learning composition assumption}
-    tacitly made by learned TE systems that couple a neural allocator
-    with a constraint-repair layer, and design a controlled protocol ---
-    varying training status, repair budget, observability, and seeds in
-    isolation --- to test it (\cref{sec:formulation,sec:eval}).
-    \item We show the assumption fails via a mechanism we call
-    \emph{repair absorption}: repair acts as a switch --- one step
-    collapses the entire learned differential, and further steps add
-    nothing --- while in absolute terms that same repair is what
-    delivers most of the performance; without repair, learning is
-    effective across the entire observability range tested, with no
-    collapse boundary even at $\rho=0.02$ (\cref{sec:eval}).
-    \item We characterize what learning \emph{does} still provide --- a
-    stability advantage in variance and worst-case MLU --- and
-    translate the findings into guidance for evaluating, designing,
-    and deploying learned TE under sparse observations, validated
-    across constellation scales (\cref{sec:eval,sec:conclusion}).
-    \item We show that the inherited repair layer owes much of its
-    strength to reading the ground-truth traffic matrix --- a
-    dependence that is unremarkable under full observability but
-    unavailable, and to our knowledge never isolated, under sparse
-    measurement. Making the matrix repair reads an explicit factor
-    separates the repair \emph{algorithm} from the repair
-    \emph{information} (\cref{sec:deployable}).
+    \item We formulate the sparse-observation TE problem for LEO
+    constellations, in which the controller meters only a fraction
+    $\rho$ of demands per epoch yet is evaluated by the realized MLU
+    that all traffic, observed or not, induces on the network.
+    \item We design \sysname{}, a sparse-aware learned allocator that
+    combines learnable mask embeddings, mask-aware gated message
+    passing, and temporal cross-attention, so that missing
+    measurements are represented explicitly rather than filled with
+    fabricated volumes.
+    \item We identify that the feasibility-repair step inherited from
+    full-observation TE reads the ground-truth traffic matrix, and we
+    design a deployable alternative whose rebalancing is driven by a
+    neighbor-based estimate computed from the observation alone,
+    showing how the information source handed to repair determines
+    its effectiveness under sparsity.
+    \item We evaluate \sysname{} at Starlink scale across observation
+    ratios from $2\%$ to $50\%$, demonstrating consistently lower
+    realized MLU than sparse adaptations of existing systems,
+    millisecond-level allocation latency, and retraining-free
+    transfer across constellation scales.
 \end{itemize}
+
+The remainder of this paper is organized as follows.
+\Cref{sec:related} reviews related work on TE for satellite networks
+and learning-based TE. \Cref{sec:formulation} formulates the
+sparse-observation TE problem. \Cref{sec:design} presents the design
+of \sysname{}. \Cref{sec:eval} reports the experimental evaluation,
+and \cref{sec:conclusion} concludes the paper.

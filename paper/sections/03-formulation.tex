@@ -13,10 +13,10 @@ slotted into control epochs; within an epoch the topology snapshot is fixed,
 while across epochs both $E^t$ and the traffic change as satellites move.
 
 Traffic is described by a demand matrix $D^t \in \mathbb{R}^{N \times N}$,
-where $d_i$ denotes the volume of the $i$-th source--destination pair. Since
+where $d_i$ denotes the volume of the $i$-th source-destination pair. Since
 satellite traffic is geographically concentrated, we maintain an \emph{active
-demand set} $\mathcal{K}^t$ --- the pairs with nonzero demand in recent
-history (\cref{sec:design}) --- and only these are modeled. Each demand
+demand set} $\mathcal{K}^t$, the pairs with nonzero demand in recent
+history, and only these are modeled. Each demand
 $i \in \mathcal{K}^t$ is served by $\kappa$ pre-selected candidate paths
 $P_i = \{p_{i,1}, \ldots, p_{i,\kappa}\}$ ($\kappa = 4$ edge-disjoint
 shortest paths in our implementation). The TE decision for demand $i$ is a
@@ -54,7 +54,7 @@ unserved traffic. Main notations are summarized in \cref{tab:notation}.
 
 With the complete demand matrix available, TE is the classic path-based
 allocation problem, for which two objectives dominate the literature.
-\emph{Load balancing} minimizes the maximum link utilization (MLU) ---
+\emph{Load balancing} minimizes the maximum link utilization (MLU),
 the standard objective in satellite TE, where hot ISLs over populated
 regions dictate quality of service~\cite{sate,hu2022,wei2024}:
 \begin{align}
@@ -68,7 +68,7 @@ regions dictate quality of service~\cite{sate,hu2022,wei2024}:
         & r_{i,k} \ge 0,
         && \forall i, k, \label{eq:mlu-nonneg}
 \end{align}
-where \eqref{eq:conserve} enforces flow conservation: every demand must
+where \cref{eq:conserve} enforces flow conservation: every demand must
 be fully served, so $\theta$ cannot be lowered by simply withholding
 traffic. \emph{Throughput maximization} instead maximizes the total
 satisfied demand, permitting demands to be served only partially when
@@ -87,9 +87,9 @@ capacity is scarce (total-flow TE~\cite{teal,ncflow}):
 \end{align}
 Both problems are linear programs solvable to optimality, but at
 constellation scale their solve time far exceeds the control
-epoch~\cite{sate}, and --- more fundamentally for this paper --- the
-link-load terms in \eqref{eq:mlu-cap} and \eqref{eq:capacity}, as well
-as the per-demand cap \eqref{eq:demand}, all require knowing $d_i$ for
+epoch~\cite{sate}. More fundamentally for this paper, the
+link-load terms in \cref{eq:mlu-cap,eq:capacity}, as well
+as the per-demand cap in \cref{eq:demand}, all require knowing $d_i$ for
 \emph{every} active demand. We treat MLU minimization as the primary
 objective throughout this paper, following the satellite TE literature,
 and report throughput maximization as a secondary instantiation to show
@@ -111,7 +111,7 @@ ground-truth traffic matrix from our Starlink trace with its node-level
 sparse observation. We consider two measurement
 granularities: \emph{flow-level}, where a fraction $\rho$ of demand pairs is
 sampled, and \emph{node-level}, where a fraction $\rho$ of satellites meter
-all their outgoing demands --- the latter matching deployments where
+all their outgoing demands; the latter matches deployments where
 measurement capability resides on a subset of satellites. The controller
 additionally retains the last $L$ sparse observations
 $H^t = (O^{t-L+1}, \ldots, O^t)$.
@@ -141,10 +141,10 @@ split ratios for \emph{all} active demands,
 maximizing the \emph{ground-truth} objective. Let
 $f_{i,k}(\pi) = \tilde{r}_{i,k} \cdot d_i$ denote the flow actually
 delivered on path $p_{i,k}$, where $\{\tilde{r}_i\}$ are the policy's
-ratios after an optional repair step (\cref{sec:training}): ADMM
+ratios after an optional repair step: ADMM
 refinement with rounding under the throughput objective, and
 conservation-preserving rebalancing under MLU, where the ratios are
-already conservation-feasible by \eqref{eq:conserve} but may still
+already conservation-feasible by \cref{eq:conserve} but may still
 overload individual links. Formally, for MLU minimization
 \begin{equation}
     \min_{\pi} \;
@@ -161,14 +161,14 @@ and, for the throughput variant,
     \label{eq:sparse-obj}
 \end{equation}
 where the expectations are over traffic and topology dynamics. Note that
-the link loads in \eqref{eq:sparse-mlu} are evaluated with the true
+the link loads in \cref{eq:sparse-mlu} are evaluated with the true
 demands $d_i$: an unmeasured demand still consumes real capacity even
 though the policy could not see it, so misjudging it inflates the
 realized MLU. The problem
 is a partially observable sequential decision problem: unlike
-\eqref{eq:mlu}--\eqref{eq:nonneg}, where the same $D^t$ appears in both
+\crefrange{eq:mlu}{eq:nonneg}, where the same $D^t$ appears in both
 the decision and the constraints, here the decision variables and the
-evaluation live in different information sets --- the policy acts on
+evaluation live in different information sets: the policy acts on
 $(O, M)$ only, while feasibility and performance are settled by the
 hidden $D$. Intuitively, the policy is graded against an exam it never
 gets to read in full.
@@ -176,16 +176,15 @@ gets to read in full.
 \subsection{Solution Paradigm}
 \label{sec:paradigm}
 
-Three solution families exist for~\eqref{eq:sparse-mlu}
-and~\eqref{eq:sparse-obj}.
+Three solution families exist for \cref{eq:sparse-mlu,eq:sparse-obj}.
 \emph{Solve-with-zeros} plugs $O$ directly into the
-LP~\eqref{eq:mlu}--\eqref{eq:nonneg}, implicitly assuming unmeasured
+LP in \crefrange{eq:mlu}{eq:nonneg}, implicitly assuming unmeasured
 demands are zero; the resulting policy leaves no headroom on the links
 that unmeasured traffic actually traverses, so the realized MLU can be far
 above the optimum (and, under the throughput objective, unmeasured
-demands are structurally starved). \emph{Two-stage} approaches first estimate $\hat{D}$ from $(H, M)$
---- via interpolation, tensor completion, or compressive
-sensing~\cite{vardi1996,zhang2003,zhang2009} --- then
+demands are structurally starved). \emph{Two-stage} approaches first estimate $\hat{D}$ from $(H, M)$,
+via interpolation, tensor completion, or compressive
+sensing~\cite{vardi1996,zhang2003,zhang2009}, and then
 solve the LP on $\hat{D}$; estimation is optimized for reconstruction error,
 which is misaligned with allocation quality, and errors propagate un-damped
 into the allocation. We instead adopt \emph{end-to-end learning}:
@@ -196,16 +195,16 @@ against the TE objective,
     \mathbb{E} \bigl[ R\bigl(\pi_\theta(H, M, G),\, D\bigr) \bigr],
     \label{eq:rl-obj}
 \end{equation}
-where $R$ is the TE objective evaluated on the true $D$ --- negative
-realized MLU for~\eqref{eq:sparse-mlu}, or total satisfied demand
-for~\eqref{eq:sparse-obj}. Since $R$
+where $R$ is the TE objective evaluated on the true $D$: negative
+realized MLU for \cref{eq:sparse-mlu}, or total satisfied demand
+for \cref{eq:sparse-obj}. Since $R$
 is non-differentiable through the capacity-constrained network and the true
 $D$ is available only as a training-time signal, we
-optimize~\eqref{eq:rl-obj} with multi-agent reinforcement learning --- each
-demand acts as an agent sharing $\theta$, receiving a COMA-style
-marginal-contribution reward (\cref{sec:design}) --- followed by an
+optimize \cref{eq:rl-obj} with multi-agent reinforcement learning, in
+which each demand acts as an agent sharing $\theta$ and receives a
+COMA-style marginal-contribution reward, followed by an
 optional lightweight repair step at inference that relieves overloaded
-links (\cref{sec:training}). This paradigm makes the observation
-model~\eqref{eq:obs} a property of the \emph{input}, and the optimization
-target~\eqref{eq:sparse-obj} a property of the \emph{training signal},
+links. This paradigm makes the observation
+model in \cref{eq:obs} a property of the \emph{input}, and the optimization
+target in \cref{eq:sparse-obj} a property of the \emph{training signal},
 cleanly separating what the policy can see from what it is optimized for.

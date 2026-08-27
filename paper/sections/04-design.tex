@@ -47,12 +47,13 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
 
 \begin{figure}[t]
     \centering
-    % 占位图（ImageGen 草稿）；布局定稿后用 TikZ 矢量重绘
-    \includegraphics[width=\linewidth]{figures/architecture-draft.png}
+    % TikZ 矢量图（figures/architecture.tex），替换早期 ImageGen 草稿 PNG
+    \input{figures/architecture}
     \caption{\sysname{} overview: a sparse observation is embedded with
     mask awareness, processed by a gated flow-centric GNN in parallel with a
     temporal encoder, fused via per-demand cross-attention, and mapped to
-    split ratios refined by the constraint-repair step.}
+    split ratios refined by the observation-fed repair step, whose traffic
+    estimate is computed from the same sparse observation.}
     \label{fig:arch}
 \end{figure}
 
@@ -60,8 +61,8 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
 \label{sec:mask-embed}
 
 A sparse observation is fundamentally ambiguous: a zero entry may mean ``no
-traffic'' or ``not measured''. Zero-filling --- the de-facto treatment in
-prior sparse TE~\cite{test} --- collapses the two cases and systematically
+traffic'' or ``not measured''. Zero-filling, the de-facto treatment in
+prior sparse TE~\cite{test}, collapses the two cases and systematically
 biases the allocator toward starving unmeasured demands. \sysname{} instead
 assigns each unmeasured demand a \emph{learnable mask embedding}
 $\phi \in \mathbb{R}^{\kappa}$ (one scalar per candidate path):
@@ -70,11 +71,11 @@ $\phi \in \mathbb{R}^{\kappa}$ (one scalar per candidate path):
     \label{eq:mask-embed}
 \end{equation}
 so the model learns a data-driven prior for missing traffic during
-end-to-end training, and --- critically --- the input itself distinguishes
+end-to-end training, and, critically, the input itself distinguishes
 ``not measured'' from ``zero''. Learnable imputation has proven effective
 for incomplete graph features~\cite{t2gnn}; we bring it to TE, where the
 imputed value directly steers resource allocation. The embedding is trained
-jointly with the policy under the TE objective~\eqref{eq:rl-obj} rather than
+jointly with the policy under the TE objective in \cref{eq:rl-obj} rather than
 a reconstruction loss, so $\phi$ converges to values that maximize
 allocation quality, not reconstruction accuracy.
 
@@ -87,8 +88,8 @@ the EdgeNodes it traverses, and message passing alternates between them
 with GCN-style normalized aggregation~\cite{kipf2017}.
 Under sparse observation, however, symmetric message passing is harmful:
 placeholder values on unmeasured PathNodes would propagate into EdgeNode
-embeddings and corrupt the network-wide estimate of link utilization --- a
-phenomenon consistent with the feature--structure interference observed in
+embeddings and corrupt the network-wide estimate of link utilization, a
+phenomenon consistent with the feature-structure interference observed in
 incomplete graphs~\cite{t2gnn}. We therefore gate the propagation
 \emph{asymmetrically}. Let $A$ be the normalized bipartite adjacency; we
 zero out entries that carry path-to-edge messages from unmeasured paths
@@ -99,14 +100,14 @@ while keeping all edge-to-path entries:
     \label{eq:gate}
 \end{equation}
 where $M_p$ is the demand-level mask lifted to path $p$. Unmeasured demands
-thus remain \emph{listeners}: they sense link states --- which are shaped by
-measured traffic --- but inject no fabricated volume into them. The gate is
+thus remain \emph{listeners}: they sense link states, which are shaped by
+measured traffic, but inject no fabricated volume into them. The gate is
 a fixed binary function of the mask with no extra parameters, adding zero
 inference overhead. The asymmetric gate yields a formal isolation property:
 
 \begin{proposition}[Placeholder isolation]
 \label{prop:isolation}
-Under the gated propagation~\eqref{eq:gate}, the embeddings of all
+Under the gated propagation in \cref{eq:gate}, the embeddings of all
 EdgeNodes and of all PathNodes belonging to measured demands are
 independent of the mask embedding $\phi$; $\phi$ influences only the
 allocations of unmeasured demands.
@@ -124,16 +125,16 @@ input; the per-demand layers mix only paths of the same demand, which
 share the same mask value. The temporal and fusion streams preserve the
 property: the temporal encoder acts per path on the raw observation
 history $H^t$, which contains no $\phi$ by construction, and the
-cross-attention of~\eqref{eq:fusion} operates strictly within each demand,
+cross-attention of \cref{eq:fusion} operates strictly within each demand,
 so the fused features of a measured demand combine only its own
 $\phi$-free temporal and spatial embeddings. Thus $\phi$ never enters any
-$\phi$-free branch, and only unmeasured PathNodes --- and consequently
-their own split ratios --- depend on $\phi$.
+$\phi$-free branch, and only unmeasured PathNodes, and consequently
+their own split ratios, depend on $\phi$.
 \end{IEEEproof}
 
 In other words, learning a poor prior $\phi$ can at worst misallocate the
 unmeasured demands themselves, but can never corrupt the allocations of
-measured traffic --- a robustness guarantee that zero-filling with
+measured traffic, a robustness guarantee that zero-filling with
 ungated propagation does not provide.
 
 \subsection{Temporal-Spatial Fusion}
@@ -144,8 +145,8 @@ recent history of sparse observations therefore carries recoverable
 information about currently missing entries. \sysname{} encodes, for each
 candidate path, its observation sequence over the last $L$ epochs with a
 lightweight Transformer~\cite{vaswani2017}: scalar volumes are
-log-compressed --- which we find
-essential for training stability --- and projected to $d_{\mathrm{model}}$
+log-compressed, which we find
+essential for training stability, and projected to $d_{\mathrm{model}}$
 dimensions, summed with learnable positional embeddings, and passed through
 a Transformer encoder; the representation at the latest step forms the
 temporal embedding $H_T$. Rather than concatenating temporal and spatial
@@ -163,16 +164,16 @@ and the fused features $[H_S \,\|\, H_F]$ feed the policy head. Intuitively,
 the temporal stream decides \emph{which} spatial evidence to trust for each
 path: when the current entry is missing, attention shifts toward paths and
 links whose states corroborate the historical pattern. The full pipeline
-infers in under 0.4~s per snapshot on the 1{,}584-satellite constellation
-(\cref{sec:eval}), well within the 5-minute control-loop period.
+infers in under 0.4~s per snapshot on the 1{,}584-satellite constellation,
+well within the 5-minute control-loop period.
 
 \subsection{Scaling to Dynamic Constellations}
 \label{sec:scaling}
 
 \subsubsection{Demand Pruning}
 Modeling all $N(N-1)$ pairs of a 1,584-satellite constellation yields 2.5M
-demands and tens of millions of path variables --- infeasible for online
-control. Satellite traffic, however, is geographically concentrated: only
+demands and tens of millions of path variables, which is infeasible for
+online control. Satellite traffic, however, is geographically concentrated: only
 0.25\% of pairs ever carry traffic in our dataset. \sysname{} instantiates
 PathNodes only for the demand-pair union observed in historical traffic
 matrices, shrinking the graph by ${\sim}400\times$ with no loss of served
@@ -180,18 +181,18 @@ traffic, in the same spirit as SaTE's traffic pruning~\cite{sate}.
 
 \subsubsection{Zero-Retraining under Drift}
 Pruned demand sets are not static: as satellites move, the active pair set
-drifts (we measure ${\sim}10\%$ turnover across our trace,
-\cref{sec:eval}). Rather than retraining, \sysname{} exploits a structural
-property of its architecture: every learnable component --- GNN layers, mask
-embedding, temporal encoder, fusion and policy heads --- is shared across
+drifts (we measure ${\sim}10\%$ turnover across our
+trace). Rather than retraining, \sysname{} exploits a structural
+property of its architecture: every learnable component (GNN layers, mask
+embedding, temporal encoder, fusion and policy heads) is shared across
 demands and independent of the demand-set size. The demand set, candidate
 paths, and the bipartite graph are runtime \emph{inputs}, not parameters. At
 each control epoch the controller rebuilds the graph from the current active
-set --- a millisecond-scale index operation on +Grid constellations, where
+set (a millisecond-scale index operation on +Grid constellations, where
 candidate paths depend only on the orbital displacement between endpoints
-and reduce to $O(N)$ path templates --- and reuses the trained weights
-as-is. Demands outside the modeled set --- necessarily sporadic mice flows
---- fall back to shortest-path routing until the next set refresh.
+and reduce to $O(N)$ path templates) and reuses the trained weights
+as-is. Demands outside the modeled set, necessarily sporadic mice flows,
+fall back to shortest-path routing until the next set refresh.
 This reuse is justified by the following structural property:
 
 \begin{proposition}[Size invariance and permutation equivariance]
@@ -210,7 +211,7 @@ their parameter shapes involves $|\mathcal{K}^t|$, $N$, or $|E^t|$.
 Permuting demand indices permutes the rows of every input and of the
 bipartite adjacency consistently; since shared node-wise operators commute
 with permutations and sparse aggregation is index-based, all intermediate
-embeddings --- and hence the outputs --- are permuted identically.
+embeddings, and hence the outputs, are permuted identically.
 \end{IEEEproof}
 
 \subsection{Training and Constraint Repair}
@@ -222,7 +223,7 @@ Gaussian mean per path, and actions are sampled during training. To assign
 credit, each agent receives a COMA-style~\cite{foerster2018}
 counterfactual reward that
 estimates its marginal contribution to the global
-objective~\eqref{eq:rl-obj}: for demand $i$,
+objective in \cref{eq:rl-obj}: for demand $i$,
 \begin{equation}
     A_i = \mathbb{E}_{\tilde{r}_i \sim \pi'}
         \bigl[ R(r_{-i}, r_i) - R(r_{-i}, \tilde{r}_i) \bigr],
@@ -233,8 +234,8 @@ $\tilde{r}_i$ is a counterfactual action resampled from a reference
 distribution $\pi'$; the policy gradient weights each agent's log
 probability by $A_i$. \Cref{alg:train} summarizes offline training. Two
 points deserve emphasis. First, the reward is computed against
-\emph{ground-truth} demands during offline training --- sparse observation
-constrains the policy input, never the training signal --- which is exactly
+\emph{ground-truth} demands during offline training (sparse observation
+constrains the policy input, never the training signal), which is exactly
 what a simulator or historical trace provides. Second, we deliberately
 retain reward-driven RL rather than imitation learning~\cite{fnc}:
 imitation learning requires expert allocations solved from \emph{fully
@@ -245,35 +246,44 @@ the network itself provides.
 \textbf{Constraint repair.} Under the throughput objective, allocations
 are refined by two parallelizable ADMM~\cite{boyd2011} iterations and a
 rounding pass that together repair residual violations of the capacity
-constraint~\eqref{eq:capacity}. Under the MLU objective --- our primary
-setting --- the situation differs, and the difference turns out to govern
-the rest of this paper. The softmax ratios already satisfy flow
-conservation~\eqref{eq:conserve} by construction, so there is no
+constraint in \cref{eq:capacity}. Under the MLU objective, our primary
+setting, the situation differs. The softmax ratios already satisfy flow
+conservation in \cref{eq:conserve} by construction, so there is no
 infeasibility to project away; what they can still do is overload
 individual links. The repair step is therefore not a projection but a
 \emph{conservation-preserving rebalancing}: for each demand it repeatedly
-shifts a fraction of the flow from its most congested candidate path ---
-ranked by the bottleneck utilization of the links that path traverses ---
+shifts a fraction of the flow from its most congested candidate path,
+ranked by the bottleneck utilization of the links that path traverses,
 onto its least congested one, leaving per-demand totals untouched so that
 MLU cannot be lowered by under-serving traffic. One unit of repair budget
 corresponds to ten such sweeps.
 
-\textbf{What repair needs to know.} Ranking paths by bottleneck
+\textbf{Observation-fed repair.} Ranking paths by bottleneck
 utilization requires link loads, and link loads require demand volumes.
-In the fully-observed WAN setting this repair mechanism was designed for,
+In the fully observed WAN setting this repair mechanism was designed for,
 those volumes are available at decision time, so consulting them is
 unremarkable. Under sparse observation they are not: a controller that
 meters only a fraction $\rho$ of demands cannot compute the true
-utilization. We therefore promote \emph{which matrix repair reads} to an
-explicit factor of the study, with three settings --- \textsc{oracle},
-which reads the ground-truth matrix and reproduces the inherited
-implementation; \textsc{obs-zero}, which reads the sparse observation
-with unobserved demands zero-filled; and \textsc{obs-nbr}, which fills
-them with the neighbor estimate of \cref{sec:mask-embed}. Only the latter
-two are deployable under sparse measurement. \Cref{sec:eval} shows that
-this distinction --- invisible in the fully-observed setting, and to our
-knowledge never isolated before --- decides whether the learned component
-contributes at all.
+utilization, so the inherited implementation, which reads the
+ground-truth matrix to rank paths (denoted \textsc{oracle}), is not
+deployable. \sysname{} instead drives repair with a traffic estimate
+$\hat{D}^t$ computed purely from the observation. The estimate itself is
+a design choice, and it matters. Zero-filling the unobserved entries
+(\textsc{obs-zero}) makes repair blind to the load that unmeasured
+traffic places on links, so it misranks congested paths exactly where
+repair is needed most. \sysname{} therefore fills each unobserved demand
+with a \emph{neighbor estimate}: the volume inferred from observed
+demands sharing the same source satellite, scaled to preserve the
+observed per-source totals (\textsc{obs-nbr}). This exploits the
+geographic concentration of satellite traffic, in which demands from the
+same satellite footprint are strongly correlated, and it gives the
+rebalancing sweeps a utilization estimate that ranks paths nearly as
+well as the ground truth. Choosing what repair reads is thus the second
+half of sparse-aware design: the learned allocator supplies a
+sparse-aware allocation prior, and the observation-fed repair corrects
+residual overloads, with the neighbor estimate keeping the correction
+effective at low observability. We quantify the gap among the three
+information sources in the evaluation.
 
 \begin{algorithm}[t]
 \caption{Offline training of \sysname{}}
@@ -287,7 +297,7 @@ contributes at all.
         \State form sparse input $(H^t, M)$;
             sample actions $r \sim \pi_\theta(\cdot \mid H^t, M, G^t)$
         \State compute counterfactual rewards $\{A_i\}$
-            via~\eqref{eq:coma} \textbf{using the true} $D^t$
+            via \cref{eq:coma} \textbf{using the true} $D^t$
         \State $\theta \gets \theta + \eta \sum_i A_i
             \nabla_\theta \log \pi_\theta(r_i)$
     \EndFor
@@ -313,8 +323,8 @@ $O(D)$, and all operations are batched across demands on the GPU.
 Crucially, the parameter count is independent of $D$, $N$, and $E$: the same
 weights apply to any demand set, which is what enables zero-retraining reuse
 (\cref{sec:scaling}). In our configuration the entire model has merely
-4{,}468 trainable parameters --- small enough to be replicated on
+4{,}468 trainable parameters, small enough to be replicated on
 resource-constrained satellite platforms. Demand pruning reduces $D$ from
-$N(N-1)$ to the observed support --- roughly $400\times$ on our
-constellation --- turning an otherwise intractable problem into one
-solved well within the control period (\cref{sec:runtime}).
+$N(N-1)$ to the observed support (roughly $400\times$ on our
+constellation), turning an otherwise intractable problem into one
+solved well within the control period.

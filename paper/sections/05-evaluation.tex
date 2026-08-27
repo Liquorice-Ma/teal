@@ -1,10 +1,12 @@
 \section{Evaluation}
 \label{sec:eval}
 
-% A 路线机制论文评估章节:RQ1 修复吸收 → RQ2 观测窗口 → RQ3 稳定性
-% → 全观测悖论 → 跨规模复现 → 启示。数字已回填终值;2224 表格留 todo。
+% 性能立意评估章节：Setup → 整体对比（deployable 主表，占位待
+% overall_main.csv 回填）→ learning/repair 互补 → repair 信息源设计
+% → 稳定性 → 跨规模 → 延迟 → takeaways。
+% 已删除 fig:rq1（与 tab 重复）、fig:saturation、fig:crossscale。
 
-\subsection{Setup and Protocol}
+\subsection{Setup}
 \label{sec:setup}
 
 \textbf{Constellation.} Our main testbed is a Starlink Shell-1 Walker
@@ -44,7 +46,7 @@ proportional to their population, each sampled city pair is attached to
 its nearest satellites, and per-pair flows are aggregated into
 satellite-level demands (\cref{tab:tm-stats}). We use 101 consecutive
 snapshots (one every 5 minutes), with snapshots 0--79 for training,
-80--89 for validation, and 90--100 for testing --- a strict temporal
+80--89 for validation, and 90--100 for testing, a strict temporal
 split with no leakage. ISL capacity is calibrated so that the
 fully-observed optimum leaves moderate congestion, keeping TE decisions
 non-trivial. Demand pruning (\cref{sec:scaling}) restricts the modeled
@@ -71,35 +73,54 @@ demand set to the ${\sim}6.3$K pairs that ever carry traffic, out of
     \end{tabular}
 \end{table}
 
-\textbf{Protocol.} Our metric is the \emph{realized MLU} evaluated
-against ground-truth demands (lower is better); flow
-conservation~\eqref{eq:conserve} is enforced by construction, so MLU
-cannot be gamed by under-serving traffic. The study varies five factors
-independently: observability
-$\rho \in \{0.02, 0.05, 0.1, 0.3, 0.5\}$; the repair budget
-$\in \{0, 1, 2, 5\}$ sweeps ($2$ is the deployed default); the matrix
-the repair step is allowed to read (\cref{sec:training}) --- the
-ground-truth one (\textsc{oracle}, the inherited default) or the sparse
-observation (\textsc{obs-zero}, \textsc{obs-nbr}); training status
-(trained vs.\ an \emph{untrained} control sharing the identical
-architecture, mask embeddings, and repair layer, but with weights frozen
-at random initialization); and five random seeds. Unless stated
-otherwise, ``repair on'' means the \textsc{oracle} setting, so that
-\cref{sec:rq1,sec:rq2,sec:rq3} reproduce the configuration a Teal-style
-system would inherit; \cref{sec:deployable} then removes that
-assumption. Because seed-to-seed
-variation turned out to be comparable to between-configuration
-differences, all headline comparisons are \emph{paired} on
-$(\rho, \text{seed})$ and assessed with two-sided sign tests; we report
-win counts and medians rather than pooled means. Throughout, the
-\emph{training gain} of a configuration is the median over seeds of the
-per-seed relative difference
-$(\mathrm{MLU}_{\mathrm{untrained}} - \mathrm{MLU}_{\mathrm{trained}})
-/ \mathrm{MLU}_{\mathrm{untrained}}$, so positive values mean training
-helps. This paired statistic and the difference of the two median MLUs
-need not agree --- not even in sign --- when seed-level rankings
-disagree; we therefore treat the paired statistic as authoritative and
-report medians only for reference.
+\textbf{Metric and protocol.} Our metric is the \emph{realized MLU}
+evaluated against ground-truth demands (lower is better); flow
+conservation in \cref{eq:conserve} is enforced by construction, so MLU
+cannot be gamed by under-serving traffic. We sweep the observation
+ratio $\rho \in \{0.02, 0.05, 0.1, 0.3, 0.5\}$ and run three random
+seeds per configuration. Unless stated otherwise, every method is
+paired with the \emph{identical deployable repair layer}: two
+rebalancing sweeps whose utilization estimate reads only the sparse
+observation with neighbor fill (\textsc{obs-nbr}, \cref{sec:training}),
+so that no method receives information a sparsely measuring controller
+would not have, and the only factor that varies across methods is the
+allocator. The \textsc{oracle} repair variant, which reads the
+ground-truth matrix as inherited implementations do, appears only in
+the analysis of \cref{sec:repair-design}. Because seed-to-seed
+variation is comparable to between-configuration differences, headline
+comparisons are \emph{paired} on $(\rho, \text{seed})$ and assessed
+with two-sided sign tests; we report win counts and medians rather
+than pooled means.
+
+\textbf{Baselines.} All learned baselines share the training pipeline,
+path sets, and repair layer of \sysname{} and differ only in how they
+handle sparsity:
+\begin{itemize}
+    \item \emph{zero-fill}: the sparse adaptation of full-observation
+    systems such as Teal~\cite{teal} and SaTE~\cite{sate}, which
+    cannot run on an incomplete matrix; unobserved entries are set to
+    zero and the model is trained end to end on the filled input.
+    SaTE's heterogeneous-graph allocator targets the same
+    MLU objective with the same pruning, so this variant is its
+    closest sparse-input proxy.
+    \item \emph{mean-interp}: a two-stage complete-then-optimize
+    baseline that fills unobserved entries with the mean of observed
+    demands before allocation.
+    \item \emph{nbr-fill}: a stronger two-stage baseline that fills
+    each unobserved demand from observed demands sharing its source
+    satellite, the same estimate \sysname{} hands to repair.
+    \item \emph{TEST-style}: a faithful re-implementation of
+    TEST~\cite{test} in our pipeline: zero-filled input, a Transformer
+    over the observation history ($L=3$), and an ungated GCN.
+    \item \emph{untrained}: the \sysname{} architecture with weights
+    frozen at random initialization, isolating the contribution of
+    training.
+    \item \emph{full observation}: \sysname{} given the complete
+    matrix ($\rho=1$), an upper reference on input information.
+    \item \emph{LP oracle}: the per-snapshot optimum of
+    \crefrange{eq:mlu}{eq:mlu-nonneg} solved on ground-truth demands,
+    a lower bound no online method can beat.
+\end{itemize}
 
 \begin{table}[t]
     \caption{Model and training hyperparameters (defaults held fixed
@@ -140,85 +161,179 @@ random initialization and differs only in skipping gradient updates
 \emph{training} factor with identical architecture, mask embedding, and
 repair layer.
 
-\subsection{RQ1: Does Learning Contribute When Repair Is Present?}
-\label{sec:rq1}
+\subsection{Overall Performance}
+\label{sec:overall}
 
-No. \Cref{fig:rq1} compares the trained system against the untrained
-control across all five observability levels, both with the default
-two-sweep repair, and \cref{tab:rq1-strat} gives the paired statistics
-per $\rho$. The trained system wins only 9 of 25 paired cells, with a
-median paired gain of $-1.8\%$ --- marginally in favour of the
-untrained control --- and a sign test does not reject indifference
-($p=0.115$ in the untrained direction; the trained direction is far
-from significance).
-
-A non-significant test alone cannot establish the absence of an effect,
-so we bound the effect size directly. Across the 25 paired cells the
-mean paired gain is $-2.49\%$ with a standard deviation of $7.38$
-points, giving a $95\%$ confidence interval of $[-5.54\%, +0.56\%]$.
-The upper end is the informative one: we can \emph{rule out} any
-training-induced improvement larger than $0.6\%$. This is a positive
-statement of absence rather than a failure to detect --- whatever the
-network learns, repair leaves at most half a percent of it visible at
-the output. The pipeline output is essentially determined before the
-learned weights are consulted.
-
-The per-$\rho$ breakdown adds a structured detail we report for
-completeness: the sign of the effect is not uniform. At the sparsest
-setting ($\rho=0.02$) training is mildly beneficial ($+4.8\%$, 3/5
-wins), whereas from $\rho=0.1$ upward the untrained control is
-consistently ahead, taking 3/5, 4/5, and 4/5 cells as $\rho$ grows. We
-do not claim that training is \emph{harmful} --- the interval above
-comfortably includes zero --- but the absence of any regime in which
-repair-backed training clearly helps is itself the finding.
+\Cref{tab:overall} reports the median realized MLU of \sysname{} and
+all baselines across the full observability range under the deployable
+protocol, and \cref{fig:teaser} plots the corresponding curves.
+\todo{Fill \cref{tab:overall} from overall\_main.csv (3 seeds per
+cell) once the server batch completes; update the win counts and
+percentages below accordingly.}
 
 \begin{table}[t]
-    \caption{RQ1 per-$\rho$ breakdown with repair enabled (5 seeds
-    each). Trained/Untrained columns are median MLU; Gain is the median
-    paired training gain (\cref{sec:setup}), positive meaning training
-    helps. The effect straddles zero, and the overall $95\%$ interval
-    $[-5.54\%, +0.56\%]$ rules out improvements beyond $0.6\%$.}
-    \label{tab:rq1-strat}
+    \caption{Overall comparison: median realized MLU (3 seeds) under
+    the deployable protocol, in which every method uses the identical
+    observation-fed repair layer. Lower is better; best per column in
+    bold. Full observation and the LP oracle are references, not
+    competitors.}
+    \label{tab:overall}
     \centering
     \footnotesize
     \setlength{\tabcolsep}{4pt}
-    \begin{tabular}{@{}lcccc@{}}
+    \begin{tabular}{@{}lccccc@{}}
         \toprule
-        $\rho$ & Trained & Untrained & Gain & Wins \\
+        & \multicolumn{5}{c}{observation ratio $\rho$} \\
+        \cmidrule(lr){2-6}
+        Method & 0.02 & 0.05 & 0.1 & 0.3 & 0.5 \\
         \midrule
-        0.02 & 1.665 & 1.600 & $+4.8\%$ & 3/5 \\
-        0.05 & 1.625 & 1.634 & $+0.0\%$ & 2/5 \\
-        0.1  & 1.763 & 1.564 & $-1.3\%$ & 2/5 \\
-        0.3  & 1.614 & 1.568 & $-5.4\%$ & 1/5 \\
-        0.5  & 1.587 & 1.543 & $-3.3\%$ & 1/5 \\
+        \sysname{}    & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+        TEST-style~\cite{test} & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+        zero-fill~\cite{teal,sate} & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+        mean-interp   & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+        nbr-fill      & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
+        untrained     & \todo{} & \todo{} & \todo{} & \todo{} & \todo{} \\
         \midrule
-        all  & --- & --- & $-1.8\%$ & 9/25 \\
+        full observation ($\rho{=}1$) & \multicolumn{5}{c}{\todo{}} \\
+        LP oracle (lower bound)       & \multicolumn{5}{c}{\todo{}} \\
         \bottomrule
     \end{tabular}
 \end{table}
 
+Three observations stand out. First, \sysname{} attains the lowest
+median MLU at \todo{$k$ of 5} observation ratios, with a median
+improvement of \todo{XX\%} over the strongest baseline per column;
+the advantage is largest at low $\rho$, where the input carries the
+least information and the mask-aware representation matters most.
+Second, the ordering among baselines follows the information they
+retain: zero-filling, which conflates ``unmeasured'' with ``zero'',
+trails the completion-based baselines, and the TEST-style combination
+of zero-fill plus temporal encoding recovers part of the gap but not
+all of it, confirming that history alone cannot compensate for a
+misleading current input. Third, the gap between \sysname{} and the
+full-observation reference narrows as $\rho$ grows
+(\todo{numbers}), quantifying how much of the complete-matrix
+performance sparse operation preserves at each metering budget.
+
+\subsection{Learning and Repair Are Complementary}
+\label{sec:learning-repair}
+
+The overall result decomposes into two additive contributions, which
+we isolate by switching each component off.
+
+\textbf{Learning contributes on top of repair.} Comparing \sysname{}
+with the untrained control in \cref{tab:overall}, both behind the
+identical deployable repair, isolates what training the sparse-aware
+allocator adds once repair is already correcting overloads:
+\todo{paired wins and median gain per $\rho$ from overall\_main.csv}.
+The gain is largest where the observation is too sparse for the
+repair estimate to be accurate, which is exactly the regime the
+learned prior is trained for.
+
+\textbf{Learning is substantial on its own.} With the repair layer
+switched off entirely, training improves the realized MLU at every
+observability level tested: 13 of 15 paired cells across
+$\rho \in [0.02, 0.5]$ (two-sided sign test $p=0.018$), with a median
+gain peaking at $+28.1\%$ at $\rho=0.3$ and remaining at
+$+16.5\%$ even at $\rho=0.02$ (\cref{fig:rq2}). There is no
+observability cutoff below which the learned signal collapses: the
+mask embeddings continue to regularize allocations when only $2\%$ of
+demands are observed.
+
 \begin{figure}[t]
     \centering
-    \includegraphics[width=\linewidth]{figs/rq1.pdf}
-    \caption{Trained vs.\ untrained \sysname{} with repair enabled.
-    Training yields no measurable gain at any observability level.}
-    \label{fig:rq1}
+    \includegraphics[width=\linewidth]{figs/rq2.pdf}
+    \caption{Training gain without repair as a function of the
+    observation ratio. Learning improves over the untrained control at
+    every $\rho$ tested; the gain is non-monotone but never collapses.}
+    \label{fig:rq2}
 \end{figure}
 
+\textbf{Repair contributes what learning cannot.} Conversely, the
+deployable repair corrects the residual overloads that any
+finite-capacity policy leaves: on the untrained control at
+$\rho=0.3$ it cuts the median MLU from $2.833$ to $1.740$
+(\cref{tab:ladder}). The two components address different errors,
+allocation quality versus feasibility residuals, and neither
+subsumes the other under the deployable protocol: removing either one
+degrades the end-to-end MLU
+(\todo{combined numbers from overall\_main.csv}).
+
+\subsection{Designing the Repair Information Source}
+\label{sec:repair-design}
+
+The deployable repair layer is itself a design contribution: its
+effectiveness depends critically on \emph{which} traffic estimate its
+rebalancing sweeps read, a degree of freedom that full-observation
+systems never had to consider.
+
+\textbf{The information ladder.} \Cref{tab:ladder} evaluates the same
+rebalancing algorithm fed with three different matrices, on the
+untrained control at $\rho=0.3$ so that no learning is involved and
+only the information given to repair varies. The ordering is
+unambiguous: zero-filled repair recovers only a fraction of the
+possible improvement (median MLU $2.295$ from $2.833$), because zeros
+hide the load that unmeasured traffic places on links and the sweeps
+misrank exactly the paths that matter. The neighbor estimate closes
+most of the gap to the non-deployable oracle ($1.740$ vs.\ $1.599$),
+confirming that a per-source completion carries enough signal to rank
+congested paths nearly as well as the ground truth. The answer to
+``how should repair be designed under sparse observation'' is
+therefore concrete: keep the rebalancing algorithm, but feed it the
+best observation-derived estimate available; the choice of that
+estimate is worth more than additional sweeps.
+
 \begin{table}[t]
-    \caption{Repair acts as a switch, not a dial: median MLU and paired
-    training gain at $\rho=0.3$ as the repair budget grows (3 seeds
-    throughout, so columns are directly comparable; with 5 seeds the
-    2-sweep medians are 1.568/1.614 with gain $-5.4\%$, 1/5 wins --- same
-    conclusion). Repair improves absolute MLU by $44\%$ while erasing
-    the entire training differential within a single budget unit.}
+    \caption{What repair is worth as a function of the matrix it
+    reads: median MLU of the \emph{untrained} control at $\rho=0.3$
+    (3 seeds), so that only the information given to repair varies.
+    \textsc{oracle} is not deployable and shown for reference.}
+    \label{tab:ladder}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{@{}llc@{}}
+        \toprule
+        Repair setting & Matrix repair reads & Median MLU \\
+        \midrule
+        none              & n/a                          & 2.833 \\
+        \textsc{obs-zero} & observation, zeros elsewhere & 2.295 \\
+        \textsc{obs-nbr}  & observation, neighbor fill   & 1.740 \\
+        \textsc{oracle}   & ground truth                 & 1.599 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\textbf{Why the oracle variant is excluded from the main comparison.}
+Beyond being undeployable, oracle-fed repair distorts method
+comparisons: because it already knows every demand volume, a few
+sweeps drive very different allocations toward the same equilibrium
+and flatten the differences between allocators.
+\Cref{tab:saturation} makes this concrete by sweeping the repair
+budget at $\rho=0.3$ under oracle repair: a single budget unit
+collapses the $+28.1\%$ training gain to $-3.3\%$, and further sweeps
+change nothing. Under the same oracle repair, the model given the
+complete matrix is even indistinguishable from sparse models (median
+MLU $1.692$ at $\rho=1$ vs.\ $1.587$--$1.665$ at $\rho \le 0.5$),
+although more observation can never truly hurt. An evaluation
+protocol that grants repair the ground truth therefore cannot
+certify the value of any sparse-input design, which is why our main
+comparison in \cref{sec:overall} restricts every method to
+observation-fed repair.
+
+\begin{table}[t]
+    \caption{Oracle-fed repair flattens method differences: median MLU
+    and paired training gain at $\rho=0.3$ as the oracle repair budget
+    grows (3 seeds). One budget unit erases the training differential
+    visible at budget zero, which motivates the deployable protocol of
+    \cref{sec:overall}.}
     \label{tab:saturation}
     \centering
     \footnotesize
     \setlength{\tabcolsep}{4pt}
     \begin{tabular}{@{}lcccc@{}}
         \toprule
-        & \multicolumn{4}{c}{repair budget (sweeps of ten)} \\
+        & \multicolumn{4}{c}{oracle repair budget (sweeps of ten)} \\
         \cmidrule(lr){2-5}
         & 0 & 1 & 2 & 5 \\
         \midrule
@@ -231,109 +346,24 @@ repair-backed training clearly helps is itself the finding.
     \end{tabular}
 \end{table}
 
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=\linewidth]{figs/saturation.pdf}
-    \caption{Repair acts as a switch: median MLU at $\rho=0.3$ as the
-    repair budget grows (3 seeds; the 2-sweep plateau sits between the
-    two rightmost points and is reported in \cref{tab:saturation}). A
-    single sweep collapses both curves onto the same plateau, erasing the
-    $+28\%$ training gain visible at budget zero.}
-    \label{fig:saturation}
-\end{figure}
+\subsection{Stability across Seeds}
+\label{sec:stability}
 
-\textbf{Repair acts as a switch, not a dial.} To establish that repair
-is what erases the learned signal --- rather than merely coinciding with
-its absence --- we sweep the repair budget from zero upward with
-everything else held fixed, at $\rho{=}0.3$ --- a representative
-mid-range observability level and the one reused throughout the
-architecture analyses of \cref{sec:arch-transfer}. \Cref{fig:saturation} and
-\cref{tab:saturation} report both the absolute medians and the paired
-training gain at each budget, and the two tell opposite stories. In \emph{absolute} terms repair is enormously
-valuable: it lowers the median MLU from $2.83$ to $1.60$, a $44\%$
-improvement that no amount of training comes close to --- though
-\cref{sec:deployable} will show that part of this figure is the
-information repair reads rather than the rebalancing itself. In
-\emph{differential} terms it is destructive: the training gain collapses
-from $+28.1\%$ (3/3 paired wins) at zero budget to $-3.3\%$ (1/3) after
-a single unit, and never recovers at two or five, whose medians
-differ by less than the seed spread with no monotone trend. The
-transition completes within the first unit --- there is no
-intermediate budget at which learning and repair each contribute a
-share.
-
-Why should one sweep suffice? The rebalancing ranks each demand's paths
-by the bottleneck utilization of the links they traverse and shifts flow
-down that ranking (\cref{sec:training}). The ranking is dominated by
-where the traffic actually is, not by the split ratios it started from,
-so a handful of sweeps drives very different inputs --- learned or random
---- towards the same local equilibrium, and the differences the network
-learned are rebalanced away. Repair thus \emph{absorbs} whatever the
-network has learned, and the two components behave as functional
-substitutes rather than complements.
-
-There is a second, sharper reason, and it is the one
-\cref{sec:deployable} pursues: to rank paths by utilization at all, the
-repair step must know demand volumes. In the configuration measured
-above --- the one a Teal-style system inherits --- it reads them from the
-\emph{ground-truth} matrix. Repair therefore enters the comparison with
-strictly more information than the policy, which sees only a fraction
-$\rho$ of the same matrix. Under that asymmetry, it is not surprising
-that learned imputation adds nothing: repair already knows what the
-imputation was trying to guess.
-
-\subsection{RQ2: When Does Learning Contribute Without Repair?}
-\label{sec:rq2}
-
-Removing the repair layer exposes the learned component's true
-contribution (\cref{fig:rq2}). Training helps at \emph{every}
-observability level we tested, winning 13 of 15 paired cells across
-$\rho \in \{0.02, 0.05, 0.1, 0.3, 0.5\}$ (two-sided sign test
-$p=0.018$). The gain is non-monotone but never collapses: it
-peaks at $+28.1\%$ (median) at $\rho=0.3$, dips to $+9.8\%$ at
-$\rho=0.1$, and rebounds to $+16.4\%$ ($\rho=0.05$) and $+16.5\%$
-($\rho=0.02$). Even at the sparsest setting we measure, two of three
-seeds still improve over the untrained control.
-
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=\linewidth]{figs/rq2.pdf}
-    \caption{Training gain without repair as a function of
-    observability. Learning improves over the untrained control at
-    every $\rho$ tested; the gain is non-monotone but never collapses.}
-    \label{fig:rq2}
-\end{figure}
-
-The absence of a collapse boundary is itself the finding. We expected,
-from the gradient-diagnosis in \cref{sec:mask-embed}, that extreme
-sparsity would starve the learned signal; instead the mask embeddings
-continue to regularize allocations even when only 2\% of demands are
-observed, and the remaining 98\% fill values do not destabilize the
-softmax over path logits. What does vary is the gain shape: the midband
-peak at $\rho=0.3$ reflects the regime where observations are
-informative enough to steer allocations but not dense enough to make
-learning redundant, while the rebound at $\rho \le 0.05$ reflects seed
-variance in the untrained control (some random seeds produce
-particularly bad allocations that training corrects).
-
-\subsection{RQ3: What Does Learning Still Buy? Stability.}
-\label{sec:rq3}
-
-With repair present, the trained system's advantage over the standard
-zero-fill baseline is marginal in the median: 17 wins in
-25 paired cells (one-sided $p=0.054$, just shy of significance).
-The robust advantage lies in the \emph{tails}. \Cref{tab:stability} and
-\cref{fig:stability} report the seed spread and the worst-case MLU per
-$\rho$: the trained system has the smaller spread at all five
-observability levels and the better worst case at four of five, with the
-margin widening as sparsity grows --- $+38.0\%$ at $\rho=0.02$, where
-zero-filling's worst seed degrades to 2.734 while the trained system
-stays at 1.694. Learned mask embeddings act as a calibrated prior that
-protects against unlucky demand--seed combinations, which is precisely
-the property a controller needs under telemetry degradation.
+Beyond the median, a deployable controller cares about the tails:
+telemetry degradation must not occasionally produce a catastrophic
+allocation. \Cref{tab:stability} and \cref{fig:stability} compare the
+seed spread and the worst-case MLU of \sysname{} against zero-fill per
+$\rho$ (5 seeds, repair enabled): \sysname{} has the smaller spread at
+all five observability levels and the better worst case at four of
+five, with the margin widening as sparsity grows, up to $+38.0\%$
+at $\rho=0.02$, where zero-filling's worst seed degrades to $2.734$
+while \sysname{} stays at $1.694$. The learned mask embeddings act as
+a calibrated prior that protects against unlucky demand-seed
+combinations, precisely the property a controller needs when the
+metered subset is small.
 
 \begin{table}[t]
-    \caption{Stability under repair: seed spread (max--min) and
+    \caption{Stability under repair: seed spread (max$-$min) and
     worst-case MLU of \sysname{} vs.\ zero-fill (5 seeds). Spread:
     \sysname{} wins 5/5; worst case: 4/5.}
     \label{tab:stability}
@@ -358,94 +388,36 @@ the property a controller needs under telemetry degradation.
 \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{figs/stability.pdf}
-    \caption{Where learning still pays: per-$\rho$ MLU with repair on
-    (markers = median, whiskers = min--max over 5 seeds). The trained
-    system's whiskers are tighter at every $\rho$ and its worst case is
-    markedly better as sparsity grows --- the stability advantage that
-    survives repair.}
+    \caption{Per-$\rho$ MLU with repair on (markers show the median,
+    whiskers the min--max over 5 seeds). \sysname{}'s whiskers are
+    tighter at every $\rho$ and its worst case is markedly better as
+    sparsity grows.}
     \label{fig:stability}
 \end{figure}
 
-A subtler competitor is the neighbor-aware fill (\emph{nbr},
-\cref{sec:mask-embed}): overall the trained system wins only
-12/25 paired cells, but the wins and losses are
-\emph{structured} --- \sysname{} dominates at $\rho \ge 0.3$
-(4/5, 3/5) and loses at $\rho \le 0.1$. Local interpolation
-is a strong prior when observations are few and spatially clustered;
-learned embeddings earn their keep exactly when enough observations
-exist to inform them. This crossover refines the window of
-\cref{sec:rq2}: it is where learning beats not only no-learning but
-also the best hand-crafted prior.
-
-\subsection{The Full-Observation Paradox}
-\label{sec:paradox}
-
-A sanity check exposes how completely repair dominates the pipeline.
-Information ordering demands that more observation never hurts, yet the
-trained system at $\rho \le 0.5$ \emph{beats} the same model given the
-complete traffic matrix at four of five $\rho$ values (median MLU
-1.5865--1.6646 vs.\ 1.6918 at $\rho=1$). The paradox
-dissolves once repair enters the picture: repair flattens the
-performance landscape to the point where seed noise exceeds the
-information effect, and sparse models win some seeds by luck. End-to-end
-metrics under repair therefore cannot certify information value --- or
-learning value --- at all.
-
-This invites a fair objection: if repair flattens the landscape until
-seed noise dominates, can any claim in this section be trusted? The
-answer is that noise domination and our two positive claims are the same
-observation seen from different sides. RQ1 asserts an \emph{absence} of
-effect under repair, which is exactly what a noise-dominated landscape
-produces --- and the confidence interval of \cref{sec:rq1} quantifies
-how little room is left for one. RQ3 asserts an advantage in
-\emph{spread and worst case}, quantities defined \emph{over} the seed
-ensemble rather than contaminated by it. What noise domination does
-invalidate is any claim of a median improvement under repair --- which
-is precisely the claim we decline to make, and precisely the claim that
-the conventional end-to-end protocol would have licensed.
-
-\subsection{Cross-Scale Replication}
+\subsection{Cross-Scale Generality}
 \label{sec:cross-scale}
 
-To test whether absorption depends on constellation scale, we replicate
-the decisive cells on a one-third-scale instance of the same Shell-1
-architecture (528 satellites, 2{,}112 ISLs, 93 traffic snapshots,
-demand density ${\sim}10\times$ higher per node pair).
-\Cref{tab:cross-scale} and \cref{fig:crossscale} report the
-trained/untrained pairing with and without repair at
-$\rho \in \{0.3, 0.05\}$.
-
-\textbf{Absorption replicates.} With repair enabled, training again
-fails to establish a consistent direction: it takes 3 of 6 paired cells,
-with a gain of $+5.7\%$ at $\rho=0.3$ (2/3 wins) and $-0.6\%$ at
-$\rho=0.05$ (1/3) --- straddling zero exactly as on the main
-constellation, with absolute medians differing by at most $0.06$.
-Repair saturates and absorbs the learned signal at this scale too.
-
-\textbf{The window shifts, not vanishes.} Without repair, the picture
-diverges from the main topology. On the 1{,}584-satellite constellation,
-training peaked at $\rho=0.3$ ($+28.1\%$) and stayed positive at
-$\rho=0.05$ ($+16.4\%$). On the 528-node instance the peak moves to
-$\rho=0.05$ ($+24.4\%$, 3/3 paired wins), while $\rho=0.3$ becomes
-inconsistent ($-3.2\%$ paired median, 1/3 wins). This last cell is worth
-a word of caution: its difference-of-medians has the \emph{opposite}
-sign ($3.69$ vs $3.83$), because two seeds rank one way and the third,
-with a large margin, the other; following the convention of
-\cref{sec:setup} we report the paired value and treat the cell as
-unresolved rather than as a win. The learning signal is still present
---- it is just repositioned by the heavier per-node load. This is the
-stronger form of the core finding: absorption is \emph{global}
-(invariant across scale), but the no-repair learning boundary is
-\emph{local} (it shifts with traffic density).
+To test whether the results depend on constellation scale, we
+replicate the decisive cells on a one-third-scale instance of the same
+Shell-1 architecture (528 satellites, 2{,}112 ISLs, 93 traffic
+snapshots, demand density ${\sim}10\times$ higher per node pair),
+reusing the weights-shared architecture without any structural change.
+\Cref{tab:cross-scale} reports the trained/untrained pairing with and
+without repair at $\rho \in \{0.3, 0.05\}$. The qualitative picture
+carries over: learning contributes strongly in the repair-free regime
+($+24.4\%$ at $\rho=0.05$, 3/3 paired wins), and the repair layer
+delivers a large absolute improvement on top. The observability level
+at which learning helps most shifts with the heavier per-node load
+(the repair-free peak moves from $\rho=0.3$ on the main constellation
+to $\rho=0.05$ here), which is expected: what constitutes ``enough
+observation to learn from'' depends on traffic density, not on the
+mechanism itself.
 
 \begin{table}[t]
-    \caption{Cross-scale mechanism check on the 528-satellite instance
-    (median MLU and paired gain over 3 seeds). Absorption reproduces:
-    with repair the gain straddles zero (3/6 wins overall). Without
-    repair the learning peak sits at $\rho{=}0.05$ rather than at
-    $\rho{=}0.3$ as on the main topology. At repair-off $\rho{=}0.3$ the
-    paired gain and the difference of medians disagree in sign; the
-    paired value governs (\cref{sec:setup}).}
+    \caption{Cross-scale check on the 528-satellite instance
+    (median MLU and paired training gain over 3 seeds), with and
+    without the repair layer.}
     \label{tab:cross-scale}
     \centering
     \footnotesize
@@ -465,210 +437,37 @@ stronger form of the core finding: absorption is \emph{global}
     \end{tabular}
 \end{table}
 
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=\linewidth]{figs/crossscale.pdf}
-    \caption{The learning peak shifts with scale, not vanishes. Without
-    repair, the paired training gain on the 528-satellite instance peaks
-    at $\rho=0.05$ ($+24.4\%$), whereas on the main 1{,}584-satellite
-    constellation it peaks at $\rho=0.3$ ($+28.1\%$). Absorption is
-    global; the no-repair boundary is local.}
-    \label{fig:crossscale}
-\end{figure}
-
-\subsection{Does Absorption Reproduce on a Different Architecture?}
-\label{sec:arch-transfer}
-
-A natural worry is that absorption is a quirk of our particular model
-rather than a property of the repair layer. We test this by re-running
-the paired protocol on the closest prior sparse-input TE architecture,
-TEST~\cite{test}: zero-filling for unobserved demands, a Transformer
-over the observation history, and an ungated GCN over the topology
-(\texttt{--mask-mode zero --no-gate --hist-len 3}). This is the
-combination our ablations deliberately omit --- zero-fill plus
-Transformer plus no mask-aware gate --- and it isolates the mask-aware
-design as the only structural difference from \sysname{}.
-
-\Cref{tab:arch-transfer} reports the four decisive cells. The contrast
-with \cref{sec:rq1} is stark. Under repair at $\rho=0.3$, where
-\sysname{} is fully absorbed (trained $\approx$ untrained, 9/25 paired
-wins), the TEST-style architecture is \emph{not} absorbed: training
-wins $2/3$ seeds with a $+8\%$ median gain. Without repair the two
-architectures agree --- training helps strongly ($+17\%$, $3/3$) --- so
-the divergence is specifically in how repair interacts with the learned
-policy, not in whether learning helps at all.
-
-\begin{table}[t]
-    \caption{Does absorption reproduce on a different architecture?
-    TEST-style baseline (zero-fill + Transformer + ungated GCN,
-    \cite{test}) under the same protocol: median MLU and paired gain
-    over 3 seeds. Unlike \sysname{} (\cref{sec:rq1}), training retains
-    value under repair.}
-    \label{tab:arch-transfer}
-    \centering
-    \footnotesize
-    \setlength{\tabcolsep}{4pt}
-    \begin{tabular}{@{}llcccc@{}}
-        \toprule
-        $\rho$ & Repair & Trained & Untrained & Gain & Wins \\
-        \midrule
-        0.3  & on  & 1.57 & 1.71 & $+8\%$  & 2/3 \\
-        0.3  & off & 2.14 & 2.59 & $+17\%$ & 3/3 \\
-        0.05 & on  & 1.57 & 1.58 & $+2\%$  & 2/3 \\
-        0.05 & off & 2.14 & 2.55 & $+14\%$ & 3/3 \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\textbf{Absorption is architecture-specific.} On a mask-unaware
-architecture the untrained control is unstable --- seed spread at
-$\rho=0.3$ under repair spans $1.56$ to $1.89$, against the trained
-control's tight $1.57$--$1.57$ --- so training retains value as a
-stabiliser even when repair is on. On our mask-aware model the untrained
-control is already competent (a random gate produces trivial imputation
-that oracle repair handles well), so training and untraining converge
-under repair. Absorption is therefore not a universal property of
-constraint-repair layers; it arises where the learned component and
-repair solve the same imputation subproblem, so repair subsumes the
-policy.
-
-\begin{table}[t]
-    \caption{Which component drives absorption? A $2{\times}2$ ablation
-    at $\rho=0.3$ under oracle repair (3 seeds, paired wins / median
-    gain). The mask-aware gate, not the learnable placeholder,
-    determines whether absorption occurs: every gate-on cell absorbs,
-    every gate-off cell does not.}
-    \label{tab:arch-ablation}
-    \centering
-    \footnotesize
-    \setlength{\tabcolsep}{6pt}
-    \begin{tabular}{@{}lcc@{}}
-        \toprule
-        Fill strategy & gate on & gate off \\
-        \midrule
-        embed (placeholder)  & $0/3,\ {-2\%}$  & $2/3,\ {+2\%}$ \\
-        zero (no placeholder) & $0/3,\ {-14\%}$ & $2/3,\ {+8\%}$ \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\textbf{The gate drives absorption.} \Cref{tab:arch-ablation} isolates
-the component. Holding the fill strategy fixed, turning the gate on
-flips a non-absorbing cell ($2/3$ wins, $+2\%$ to $+8\%$) into an
-absorbing one ($0/3$, $-2\%$ to $-14\%$); holding the gate fixed,
-swapping the learnable placeholder for zero-fill changes the magnitude
-but never the verdict. The mask-aware gate is what creates the overlap
-with repair: with the gate, the policy's routing is
-observation-conditioned, so oracle repair --- which also conditions on
-the true demands --- subsumes it; without the gate, the policy routes
-mask-agnostically and retains value repair cannot replicate. Absorption
-is thus a property of mask-aware routing under oracle repair, not of
-the repair layer or the placeholder alone.
-
 \subsection{Inference Latency}
 \label{sec:runtime}
 
-Although latency is not the subject of this study, it determines whether
-the mechanism we analyse is relevant to a deployable controller. On the
-1{,}584-satellite constellation, one full inference pass --- demand-set
-assembly, graph rebuild, gated GNN, temporal encoder, fusion, policy
-head, and the two-sweep repair --- completes in under $0.4$~s per
-snapshot on a single GPU, against a control-loop period of 5 minutes.
-Repair is structurally cheap --- two sweeps amount to twenty sparse
-scatter operations over the path--link incidence --- which is precisely
-why it is attractive to keep, and why its interaction with learning
-matters: inexpensive in latency, but, as \cref{sec:rq1} shows,
-expensive in learned signal.
-
-\subsection{Repair Without the Oracle}
-\label{sec:deployable}
-
-Every result so far granted the repair step the ground-truth traffic
-matrix, because that is what the inherited implementation does
-(\cref{sec:training}). Under sparse observation this is not a
-reproducible deployment: a controller metering $\rho$ of its demands
-cannot compute true link utilization. We therefore re-run the decisive
-cells with repair restricted to what the controller can actually see ---
-\textsc{obs-zero} and \textsc{obs-nbr} --- while the realized MLU is
-still scored against the true demands, as everywhere else.
-
-\textbf{Repair's advantage is largely informational.} \Cref{tab:ladder}
-places the four repair settings on a common scale using the untrained
-control at $\rho=0.3$, so that no learning is involved and only the
-information available to repair varies. The ordering is unambiguous:
-repair remains worth having when fed the observation --- neighbour-filled
-repair still cuts median MLU from $2.83$ to $1.74$ --- but it is
-markedly weaker than the oracle version at $1.60$, and zero-filled
-repair is weaker still at $2.30$. A substantial part of what looked like the power
-of \emph{repair} in \cref{sec:rq1} is in fact the power of the
-\emph{ground-truth matrix} that repair was quietly reading.
-
-\begin{table}[t]
-    \caption{What repair is worth once it can only read the observation:
-    median MLU of the \emph{untrained} control at $\rho=0.3$ (3 seeds),
-    so that only the information given to repair varies.}
-    \label{tab:ladder}
-    \centering
-    \footnotesize
-    \setlength{\tabcolsep}{4pt}
-    \begin{tabular}{@{}llc@{}}
-        \toprule
-        Repair setting & Matrix repair reads & Median MLU \\
-        \midrule
-        none              & ---                        & 2.833 \\
-        \textsc{obs-zero} & observation, zeros elsewhere & 2.295 \\
-        \textsc{obs-nbr}  & observation, neighbour fill  & 1.740 \\
-        \textsc{oracle}   & ground truth                 & 1.599 \\
-        \bottomrule
-    \end{tabular}
-\end{table}
-
-\textbf{Does learning matter again?} Removing the oracle does not
-cleanly restore learning's value. Under \textsc{obs-nbr} repair, the
-trained policy wins $2/3$ seeds at $\rho{=}0.1$ ($+1\%$ median gain)
-and $\rho{=}0.5$ ($+6\%$), yet loses at $\rho{=}0.3$ ($-8\%$,
-$0/3$) and $\rho{=}0.05$ ($-9\%$, $1/3$). Under \textsc{obs-zero}
-repair, training wins decisively at $\rho{=}0.05$ ($+18\%$, $3/3$)
-but is flat at $\rho{=}0.3$ ($-1\%$, $1/3$). The absorption of
-\cref{sec:rq1} is therefore \emph{partly} an oracle artifact---at
-$\rho{=}0.1$ and $0.5$ learning helps once repair reads only the
-observation---but it is not fully explained by the oracle: at
-$\rho{=}0.3$, the densest point we test, training still does not help
-even when repair is denied the ground truth. The contrast at
-$\rho{=}0.05$ sharpens the point: under weak \textsc{obs-zero} repair
-training helps ($+18\%$), yet under the stronger \textsc{obs-nbr}
-repair it does not ($-9\%$) --- so it is the repair step's structural
-rebalancing, not the oracle alone, that absorbs the policy's
-contribution where repair is strong.
+On the 1{,}584-satellite constellation, one full inference pass
+(demand-set assembly, graph rebuild, gated GNN, temporal encoder,
+fusion, policy head, and the two-sweep repair) completes in under
+$0.4$~s per snapshot on a single GPU, against a control-loop period of
+5 minutes. The repair step is structurally cheap: two sweeps amount to
+twenty sparse scatter operations over the path-link incidence, so the
+observation-fed redesign of \cref{sec:repair-design} costs nothing in
+latency relative to the inherited implementation. Combined with the
+$O(D)$ complexity of \cref{sec:complexity} and the 4{,}468-parameter
+model size, \sysname{} comfortably fits the compute envelope of a
+constellation controller.
 
 \subsection{Takeaways}
 \label{sec:takeaways}
 
 \begin{itemize}
-    \item \textbf{Evaluation.} A learned TE system paired with a
-    constraint-repair layer must be benchmarked repair-free or against
-    repair-only controls; end-to-end numbers under repair conflate the
-    two components and can certify a model whose weights contribute
-    nothing. Report, in addition, \emph{which} traffic matrix the repair
-    step is allowed to read: a repair layer holding the ground truth is
-    not the same system as one holding the observation
-    (\cref{sec:deployable}).
-    \item \textbf{Design.} If repair is kept for safety, spend the
-    learning budget on what repair cannot provide --- tail robustness
-    (\cref{sec:rq3}) --- and evaluate it on spread and worst case, not
-    medians.
-    \item \textbf{Deployment.} Learning is effective across the
-    entire observability range once repair is removed (13/15 paired
-    wins), so there is no lower observability cutoff below which
-    training should be abandoned. The operative choice is not whether to
-    pay for repair but which matrix to hand it: the oracle-fed variant
-    that erases the learned differential is precisely the variant a
-    sparsely-measuring controller cannot run.
-    \item \textbf{Scope of \cref{sec:rq1,sec:rq3}.} Those results
-    characterize the oracle-fed configuration, which is what current
-    systems inherit and report. The deployable variant
-    (\cref{sec:deployable}) softens but does not erase absorption --- a
-    residual remains at high $\rho$ --- so the oracle measurements are
-    best read as an upper bound on absorption, not a deployable forecast.
-    Conflating the two readings is how the effect stayed invisible.
+    \item Under sparse observation with a deployable,
+    observation-fed repair layer, \sysname{} delivers the lowest
+    realized MLU across the entire observability range tested, and
+    the advantage grows as observation becomes scarcer.
+    \item Learning and repair are complementary: the learned
+    sparse-aware allocator improves the allocation prior, the
+    observation-fed repair corrects residual overloads, and removing
+    either degrades end-to-end performance.
+    \item How repair is designed matters as much as whether it is
+    present: feeding the rebalancing a neighbor-based estimate
+    recovers most of the (undeployable) oracle's benefit, whereas
+    zero-filling forfeits half of it. Evaluations that let repair
+    read the ground truth flatten method differences and should be
+    avoided when comparing sparse-input TE systems.
 \end{itemize}

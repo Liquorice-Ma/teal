@@ -1,0 +1,97 @@
+% TikZ 架构图（替换 architecture-draft.png）：
+% ①-④ 四阶段编号齐全；输入写作 O = D ⊙ M；repair 标注读取观测驱动的
+% 邻居估计 \hat{D}（observation-fed repair 叙事）。
+% 通过 \input{figures/architecture} 引入，外层用 resizebox 适配单栏。
+\resizebox{\linewidth}{!}{%
+\begin{tikzpicture}[
+    font=\small,
+    box/.style={draw, rounded corners=2pt, align=center, inner sep=4pt,
+                minimum height=11mm, line width=0.7pt},
+    comp/.style={box, fill=orange!15, draw=orange!70!black},
+    tempo/.style={box, fill=violet!12, draw=violet!60!black},
+    outb/.style={box, fill=green!12, draw=green!45!black},
+    rep/.style={box, fill=blue!8, draw=blue!55!black},
+    num/.style={circle, draw=black!70, fill=white, inner sep=1.2pt,
+                font=\footnotesize\bfseries, line width=0.6pt},
+    arr/.style={-{Stealth[length=2.2mm]}, line width=0.8pt, draw=black!75},
+    obsarr/.style={arr, dashed, draw=blue!55!black},
+    every node/.style={font=\small}
+]
+
+% ===== inputs =====
+% sparse observation grid: blue = observed, gray = unobserved
+\begin{scope}[shift={(0,0.55)}]
+    \foreach \i/\j in {0/3, 2/3, 1/2, 3/2, 0/1, 2/0, 3/0}
+        \fill[blue!45] (\i*0.32, \j*0.32) rectangle ++(0.32, 0.32);
+    \foreach \i/\j in {1/3, 3/3, 0/2, 2/2, 1/1, 2/1, 3/1, 0/0, 1/0}
+        \fill[black!18] (\i*0.32, \j*0.32) rectangle ++(0.32, 0.32);
+    \draw[step=0.32, black!60, line width=0.4pt] (0,0) grid (1.28,1.28);
+    \node[anchor=north, align=center] at (0.64,-0.12)
+        {Sparse observation\\ $O^t = D^t \odot M$};
+\end{scope}
+
+% history stack
+\begin{scope}[shift={(0.1,-2.75)}]
+    \fill[blue!10, draw=black!50, line width=0.4pt] (0.24,0.24) rectangle ++(1.1,0.85);
+    \fill[blue!14, draw=black!55, line width=0.4pt] (0.12,0.12) rectangle ++(1.1,0.85);
+    \fill[blue!18, draw=black!60, line width=0.4pt] (0,0) rectangle ++(1.1,0.85);
+    \node[anchor=north, align=center] at (0.67,-0.15)
+        {History $H^t$\\ ($L$ snapshots)};
+\end{scope}
+
+% ===== stage 1: mask-aware embedding =====
+\node[comp] (mask) at (3.45,1.2)
+    {Mask-aware\\ embedding\\ (learnable $\theta_{\mathrm{mask}}$)};
+\node[num] at (mask.north west) {1};
+
+% ===== stage 2: gated FlowGNN =====
+\node[comp] (gnn) at (7.35,1.2)
+    {Gated FlowGNN\\ (asymmetric gating:\\ no placeholder volumes)};
+\node[num] at (gnn.north west) {2};
+
+% ===== stage 3: temporal transformer + fusion =====
+\node[tempo] (temp) at (4.7,-2.4)
+    {Temporal\\ Transformer};
+\node[num] at (temp.north west) {3};
+
+\node[tempo] (fuse) at (8.5,-0.7)
+    {Cross-attention fusion\\ ($Q$=temporal,\\ $K/V$=spatial)};
+\node[num] at (fuse.north west) {3};
+
+% ===== stage 4: policy head =====
+\node[outb] (policy) at (12.0,-0.7)
+    {Policy head\\ split ratios $\{r_i\}$};
+\node[num] at (policy.north west) {4};
+
+% ===== observation-fed repair =====
+\node[rep] (repair) at (12.0,-2.9)
+    {Observation-fed repair\\ (reads $\hat{D}^t$: neighbor\\ estimate from $O^t$)};
+
+\node[align=center] (alloc) at (12.0,-4.7) {Traffic\\ allocation};
+
+% ===== sparse-aware dashed group =====
+\begin{scope}[on background layer]
+    \node[draw=red!70!black, dashed, rounded corners=6pt, line width=0.8pt,
+          fit=(mask)(gnn)(temp)(fuse), inner sep=7pt] (group) {};
+\end{scope}
+\node[anchor=north, font=\small\itshape, text=red!70!black]
+    at (group.south) [yshift=-1mm] {sparse-aware components};
+
+% ===== arrows =====
+\draw[arr] (1.5,1.2) -- (mask.west);
+\draw[arr] (mask.east) -- (gnn.west);
+\draw[arr] (gnn.east) -| (fuse.north);
+\draw[arr] (1.6,-2.4) -- (temp.west);
+\draw[arr] (temp.east) -| (fuse.south);
+\draw[arr] (fuse.east) -- (policy.west);
+\draw[arr] (policy.south) -- (repair.north);
+\draw[arr] (repair.south) -- (alloc.north);
+% repair 读取的 \hat{D} 来自观测，已在 repair 框内文字说明，不另画长箭头
+
+% ===== bottom banner =====
+\node[draw=black!40, fill=black!8, rounded corners=2pt, inner sep=3.5pt,
+      font=\small] at (5.0,-4.7)
+    {Weights shared across demands, size-invariant: train once, zero retraining};
+
+\end{tikzpicture}%
+}
