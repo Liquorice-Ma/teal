@@ -68,30 +68,25 @@ Observation in LEO Satellite Constellations}
 \IEEEtitleabstractindextext{%
 \begin{abstract}
 Low-Earth-orbit (LEO) satellite constellations require traffic
-engineering (TE) that allocates traffic within milliseconds over a
-network whose topology and demand shift continuously. Existing
-learning-based TE systems achieve this speed, but they assume a
-complete traffic matrix as input, whereas onboard resource limits and
-telemetry downlink costs mean a constellation controller can meter only
-a small fraction of demands at each decision epoch. Under such sparse
-observation, completing the matrix with simple zero or mean filling
-degrades allocation quality, and the feasibility-repair step that these
-systems inherit implicitly reads traffic information unavailable to a
-deployable controller. This paper presents \sysname, a sparse-aware
-traffic engineering system that jointly designs the learned allocator
-and the repair layer around the observation actually available.
-\sysname represents unobserved demands with a learnable mask embedding
-rather than fabricated values, propagates link state through a
-mask-aware gated graph neural network, encodes the history of sparse
-observations with a temporal Transformer, and drives repair with a
-neighbor-based demand estimate computed purely from the observation.
-On a 1{,}584-satellite Starlink constellation with population-driven
-traffic dynamics, \sysname achieves lower maximum link utilization than
-zero-filling, mean-interpolation, and TEST-style baselines across
-observation ratios from $2\%$ to $50\%$
-(\todo{median improvement from overall\_main.csv}), while retaining
-millisecond-level inference and transferring across constellation
-scales without retraining.
+engineering (TE) that reacts quickly to changing topology and demand.
+Existing learned TE systems achieve low online latency but assume a complete
+traffic matrix, whereas telemetry and onboard-resource constraints allow a
+constellation controller to meter only a fraction of demands at each epoch.
+This paper presents \sysname, a sparse-aware TE system that allocates all
+demands directly from incomplete observations. \sysname combines learnable
+mask embeddings, asymmetric graph gating, temporal encoding, and
+cross-attention so that missing measurements are represented explicitly and
+historical and spatial evidence are fused per demand; a source-neighbor
+estimate additionally supports optional deployment-time refinement without
+access to the ground-truth matrix. On a 1{,}584-satellite Starlink
+constellation, \sysname lowers median realized maximum link utilization
+relative to zero filling at every tested observation ratio from $2\%$ to
+$50\%$, with reductions of $1.3\%$ to $7.9\%$, and achieves the best median
+among all evaluated allocators at observation ratios $0.3$ and $0.5$.
+Results at lower ratios also expose the remaining challenge of extreme
+sparsity, where a TEST-inspired temporal baseline can be stronger.
+\sysname runs in under $0.4$~s per snapshot and transfers across
+constellation scales without architectural changes.
 \end{abstract}
 
 \begin{IEEEkeywords}

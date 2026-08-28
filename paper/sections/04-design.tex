@@ -14,9 +14,10 @@
 between candidate paths and links without letting placeholders contaminate
 link states (\cref{sec:gating}); (iii) a Transformer encodes the observation
 history and fuses it with spatial embeddings via per-demand cross-attention
-(\cref{sec:fusion}); (iv) a shared policy head outputs split ratios per
-demand, refined by the constraint-repair step (\cref{sec:training}). All
-learnable weights are
+(\cref{sec:fusion}); and (iv) a shared policy head outputs split ratios per
+demand. An optional neighbor-assisted pass refines residual overloads using
+only an observation-derived estimate (\cref{sec:training}). All learnable
+weights are
 shared across demands and independent of the demand-set size, which
 \cref{sec:scaling} exploits for zero-retraining deployment under
 constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
@@ -39,8 +40,8 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
     \Comment{temporal embeddings}
 \State $H_F \gets \textsc{CrossAttention}(H_T, H_S)$ \Comment{\cref{eq:fusion}}
 \State $\{r_i\} \gets \textsc{PolicyHead}([H_S \,\|\, H_F])$
-\State $\{r_i\} \gets \textsc{Repair}(\{r_i\}, G^t, \hat{D}^t)$
-    \Comment{\cref{sec:training}}
+\State $\{r_i\} \gets \textsc{NeighborRefine}(\{r_i\}, G^t, \hat{D}^t)$
+    \Comment{optional deployment refinement}
 \State \Return $\{r_i\}$
 \end{algorithmic}
 \end{algorithm}
@@ -52,8 +53,9 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
     \caption{\sysname{} overview: a sparse observation is embedded with
     mask awareness, processed by a gated flow-centric GNN in parallel with a
     temporal encoder, fused via per-demand cross-attention, and mapped to
-    split ratios refined by the observation-fed repair step, whose traffic
-    estimate is computed from the same sparse observation.}
+    split ratios. An optional post-processing pass estimates path congestion
+    from source-neighbor traffic and refines residual overloads without
+    accessing unmeasured demands.}
     \label{fig:arch}
 \end{figure}
 
@@ -214,7 +216,7 @@ with permutations and sparse aggregation is index-based, all intermediate
 embeddings, and hence the outputs, are permuted identically.
 \end{IEEEproof}
 
-\subsection{Training and Constraint Repair}
+\subsection{Training and Neighbor-Assisted Refinement}
 \label{sec:training}
 
 \sysname{} trains with the multi-agent RL scheme of Teal~\cite{teal}: each
@@ -243,47 +245,27 @@ realized} demands of each episode, a supervision signal that is unavailable
 when even post-hoc observation is sparse; RL needs only the reward, which
 the network itself provides.
 
-\textbf{Constraint repair.} Under the throughput objective, allocations
-are refined by two parallelizable ADMM~\cite{boyd2011} iterations and a
-rounding pass that together repair residual violations of the capacity
-constraint in \cref{eq:capacity}. Under the MLU objective, our primary
-setting, the situation differs. The softmax ratios already satisfy flow
-conservation in \cref{eq:conserve} by construction, so there is no
-infeasibility to project away; what they can still do is overload
-individual links. The repair step is therefore not a projection but a
-\emph{conservation-preserving rebalancing}: for each demand it repeatedly
-shifts a fraction of the flow from its most congested candidate path,
-ranked by the bottleneck utilization of the links that path traverses,
-onto its least congested one, leaving per-demand totals untouched so that
-MLU cannot be lowered by under-serving traffic. One unit of repair budget
-corresponds to ten such sweeps.
+\textbf{Neighbor-assisted refinement.} The policy head uses a softmax,
+so its split ratios satisfy flow conservation in \cref{eq:conserve} by
+construction. A short post-processing pass may nevertheless improve MLU by
+moving a fraction of each demand from its most congested candidate path to
+its least congested one. Each pass preserves the per-demand total and hence
+cannot reduce MLU by dropping traffic. Our deployed setting uses two rounds,
+each containing ten lightweight sweeps.
 
-\textbf{Observation-fed repair.} Ranking paths by bottleneck
-utilization requires link loads, and link loads require demand volumes.
-In the fully observed WAN setting this repair mechanism was designed for,
-those volumes are available at decision time, so consulting them is
-unremarkable. Under sparse observation they are not: a controller that
-meters only a fraction $\rho$ of demands cannot compute the true
-utilization, so the inherited implementation, which reads the
-ground-truth matrix to rank paths (denoted \textsc{oracle}), is not
-deployable. \sysname{} instead drives repair with a traffic estimate
-$\hat{D}^t$ computed purely from the observation. The estimate itself is
-a design choice, and it matters. Zero-filling the unobserved entries
-(\textsc{obs-zero}) makes repair blind to the load that unmeasured
-traffic places on links, so it misranks congested paths exactly where
-repair is needed most. \sysname{} therefore fills each unobserved demand
-with a \emph{neighbor estimate}: the volume inferred from observed
-demands sharing the same source satellite, scaled to preserve the
-observed per-source totals (\textsc{obs-nbr}). This exploits the
-geographic concentration of satellite traffic, in which demands from the
-same satellite footprint are strongly correlated, and it gives the
-rebalancing sweeps a utilization estimate that ranks paths nearly as
-well as the ground truth. Choosing what repair reads is thus the second
-half of sparse-aware design: the learned allocator supplies a
-sparse-aware allocation prior, and the observation-fed repair corrects
-residual overloads, with the neighbor estimate keeping the correction
-effective at low observability. We quantify the gap among the three
-information sources in the evaluation.
+The key difficulty under sparse observation is not the rebalancing rule but
+how to estimate the link loads used to rank paths. A controller that meters
+only a fraction $\rho$ of demands cannot compute true utilization.
+Consequently, a refinement implementation that reads the ground-truth
+matrix (denoted \textsc{oracle}) is unsuitable for deployment. \sysname{}
+computes $\hat{D}^t$ from the observation instead: every unobserved demand
+is assigned a \emph{neighbor estimate} from observed demands sharing its
+source satellite, scaled by the observed per-source traffic. This choice
+exploits geographic locality in satellite traffic and is used only to
+estimate path congestion; the learned allocator remains the main decision
+module. The evaluation compares this estimate with zero filling and the
+undeployable oracle to isolate the value of the traffic estimate rather
+than presenting post-processing as the central contribution.
 
 \begin{algorithm}[t]
 \caption{Offline training of \sysname{}}

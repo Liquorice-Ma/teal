@@ -98,7 +98,7 @@ compounded by time-varying topologies and drifting demand sets.
         Sparse observation      & \xmark & \xmark & \cmark & \xmark & \cmark \\
         Temporal modeling       & \xmark & \xmark & \cmark & \xmark & \cmark \\
         Mask-aware model        & \xmark & \xmark & \xmark & \xmark & \cmark \\
-        Observation-fed repair  & \xmark & \xmark & \xmark & \xmark & \cmark \\
+        Neighbor estimate        & \xmark & \xmark & \xmark & \xmark & \cmark \\
         Demand-set drift        & \xmark & partial & \xmark & \xmark & \cmark \\
         \bottomrule
     \end{tabular}
@@ -112,8 +112,6 @@ and targets static terrestrial networks, \sysname{} replaces missing
 entries with learnable mask embeddings, gates their message passing, and
 handles LEO dynamics, namely time-varying topologies and drifting
 demand-pair sets, via demand pruning with size-invariant model weights,
-enabling train-once, zero-retraining deployment. Finally, unlike all of
-the above, \sysname{} also redesigns the feasibility-repair step so that
-its rebalancing reads only an estimate computed from the observation,
-rather than the ground-truth traffic matrix that full-observation systems
-implicitly consult.
+enabling train-once, zero-retraining deployment. Finally, \sysname{} uses a
+source-neighbor estimate to support optional congestion-aware refinement
+without consulting the unobserved ground-truth traffic matrix.

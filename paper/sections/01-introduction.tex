@@ -1,130 +1,102 @@
 \IEEEraisesectionheading{\section{Introduction}\label{sec:intro}}
 
-% 性能立意六段式：背景 → 卫星网络为何天然是稀疏观测（适配性） →
-% 稀疏输入下现有方法的问题（含 repair 信息源） → SpaTE 方法 →
-% 结果预告 → 贡献 + 章节组织段。全文禁用破折号；不提前引用后文章节。
+% 场景立意：卫星网络为何天然需要稀疏观测 TE → 三个挑战 → SpaTE 设计 →
+% 诚实报告不同观测区间的结果。Fig. 1 恢复为稀疏观测场景图。
 
 \IEEEPARstart{L}{ow-Earth-orbit} (LEO) satellite constellations are rapidly
 scaling toward tens of thousands of satellites~\cite{handley2018,
-bhattacherjee2019,giuliari2020}, carrying user traffic with
-pronounced spatial and temporal fluctuations over inter-satellite links
-(ISLs) of limited capacity~\cite{kassing2020,michel2022}. Traffic
-engineering (TE), which centrally optimizes how each demand is split
-across candidate paths, has become a key control primitive for these
-networks~\cite{jain2013,hong2013,hong2018,sate}. Classical
-solver-based TE recomputes allocations in minutes, far too slow for a
-topology and demand pattern that shift on the order of seconds, so a
-recent line of learning-based TE systems replaces the online solver
-with a neural allocator and cuts allocation time to
-milliseconds~\cite{teal,dote,harp,sate}, making centralized control of
-constellation-scale networks practical.
+bhattacherjee2019,giuliari2020}. Their inter-satellite links (ISLs) carry
+spatially concentrated and temporally varying traffic under limited
+capacity~\cite{kassing2020,michel2022}. Traffic engineering (TE), which
+coordinates how each demand is split across candidate paths, is therefore
+a key control primitive~\cite{jain2013,hong2013,hong2018,sate}. Classical
+optimization can take minutes at constellation scale, whereas learned
+allocators reduce online decision time to the sub-second range by moving
+most computation offline~\cite{teal,dote,harp,sate}.
 
-These systems, however, assume a \emph{complete} traffic matrix as
-input, and this assumption is uniquely fragile in satellite networks.
-Obtaining a network-wide traffic matrix requires every satellite to
-meter, aggregate, and downlink fine-grained flow statistics through
-telemetry channels that compete with user traffic for scarce ISL and
-ground-station bandwidth, while consuming limited onboard computation
-and power; intermittent ground contacts further leave measurement gaps
-as the norm rather than the exception. A constellation controller
-therefore observes a \emph{sparse} traffic matrix, a fraction $\rho$
-of demands metered at each decision epoch, yet must still allocate
-\emph{all} traffic, including the unmeasured part. Conversely, a TE
-system that acts well on sparse observations lets the operator
-deliberately meter only a small demand subset and reclaim the
-telemetry budget, which is exactly why sparse-observation TE is a
-natural operating mode for LEO constellations rather than a degraded
-one.
-
-Sparse observation breaks existing learning-based TE in two places.
-First, the allocator: feeding a model trained for complete matrices
-with zero-filled input conflates ``unmeasured'' with ``no traffic''
-and leaves no headroom on the links that unmeasured demands actually
-traverse, inflating the realized maximum link utilization (MLU), while
-two-stage complete-then-optimize pipelines propagate reconstruction
-errors into allocation decisions~\cite{test}. Second, and largely
-overlooked, the feasibility-repair step: because a neural allocator
-can emit allocations that overload individual links, learned TE
-systems append a few sweeps of a convex or heuristic repair
-procedure~\cite{teal,boyd2011}, and the repair implementation
-inherited from the full-observation setting ranks congested links
-using the \emph{ground-truth} traffic matrix, information that a
-sparsely measuring controller does not possess. Under sparse
-observation, the design question is therefore twofold: how should the
-learned allocator represent what it cannot see, and what information
-should the repair step be given so that it remains effective when fed
-only the observation.
-
-This paper presents \sysname{} (\underline{Spa}rse-aware
-\underline{T}raffic \underline{E}ngineering), a learning-based TE
-system designed end to end around the observation actually available.
-On the allocator side, \sysname{} represents each unobserved demand
-with a learnable mask embedding instead of a fabricated volume,
-propagates link state through a mask-aware gated graph neural network
-so that unobserved path nodes receive congestion information without
-injecting placeholder traffic, and encodes the history of sparse
-observations with a temporal Transformer fused into the graph
-representation by cross-attention. On the repair side, \sysname{}
-restricts the rebalancing sweeps to a traffic estimate computed purely
-from the observation, filling each unobserved demand from observed
-demands that share its source. The two components add up: the learned
-allocator supplies a sparse-aware allocation prior that already avoids
-most overloads, and the observation-fed repair corrects the residual
-violations; the choice of the estimate that feeds repair, a
-neighbor-based fill rather than zeros, is what keeps the repair step
-effective at low observability.
-
-We evaluate \sysname{} on a 1{,}584-satellite Starlink Shell-1
-constellation with population-driven traffic dynamics, sweeping the
-observation ratio $\rho$ from $0.02$ to $0.5$ and comparing against
-zero-filling and mean-interpolation adaptations of full-observation
-systems and a TEST-style sparse baseline~\cite{test}, all methods
-paired with the identical deployable repair layer. \sysname{} achieves
-the lowest realized MLU at every observation ratio tested
-(\todo{headline numbers from overall\_main.csv, e.g., median MLU
-reduction over the best baseline per $\rho$}), retains
-millisecond-level inference on the full constellation, and transfers
-to a one-third-scale constellation instance without retraining
-(\cref{fig:teaser}).
+Existing learned TE systems nevertheless rely on a complete traffic matrix
+at every control epoch. This assumption is particularly fragile in an LEO
+constellation. Measuring every demand requires satellites to meter,
+aggregate, and transmit fine-grained statistics through telemetry channels
+that compete with user traffic for ISL and ground-station bandwidth. It
+also consumes onboard computation, storage, and power, while intermittent
+ground contacts introduce unavoidable gaps. As illustrated in
+\cref{fig:scenario}, only a subset of satellites may meter traffic at a
+given epoch. The controller then receives a sparse traffic matrix but must
+still allocate every demand. Efficient TE from sparse observations is thus
+a natural operating mode for LEO networks, not merely a degraded version
+of complete measurement.
 
 \begin{figure}[t]
     \centering
-    \includegraphics[width=\linewidth]{figs/teaser.pdf}
-    \caption{Realized MLU versus observation ratio $\rho$ on the
-    1{,}584-satellite constellation. \sysname{} outperforms
-    zero-filling, mean-interpolation, and TEST-style baselines at
-    every $\rho$ under the identical deployable repair layer.
-    \todo{regenerate from overall\_main.csv}}
-    \label{fig:teaser}
+    \includegraphics[width=\linewidth]{figures/scenario-draft.png}
+    \caption{Sparse traffic observation in an LEO constellation. Only a
+    subset of satellites meters traffic, so the controller receives a
+    sparse traffic matrix while remaining responsible for all demands.}
+    \label{fig:scenario}
 \end{figure}
+
+Sparse observation creates three coupled challenges. First,
+\emph{unmeasured} does not mean \emph{zero}: zero filling suppresses the
+very demands whose load the controller must anticipate, while explicit
+matrix completion can propagate reconstruction error into routing.
+Second, observations have both spatial and temporal structure. Demands
+originating from nearby satellite footprints are correlated, and recent
+snapshots contain information absent from the current mask. Third, a
+practical model must remain usable as topology snapshots and active demand
+sets change, without retraining for every orbital state. TEST~\cite{test}
+shows that temporal learning can help sparse-input TE on terrestrial
+networks, but sparse observation at constellation scale additionally
+requires topology-aware representation and size-invariant deployment.
+
+We present \sysname{} (\underline{Spa}rse-aware \underline{T}raffic
+\underline{E}ngineering), a learned allocator designed around these
+constraints. It represents each unobserved demand with a learnable mask
+embedding rather than a fabricated volume. A gated flow-centric GNN lets
+unobserved demands receive link-state information without injecting their
+placeholder values into link embeddings. A temporal Transformer encodes
+recent sparse observations, and per-demand cross-attention fuses temporal
+and spatial evidence before predicting path split ratios. Shared weights
+and demand pruning keep the model independent of the instantaneous demand
+set, enabling reuse across constellation snapshots and scales.
+
+After allocation, \sysname{} can optionally refine residual overloads using
+link loads estimated from the same sparse observation. The important input
+to this lightweight step is a neighbor estimate: an unmeasured demand is
+inferred from observed demands sharing its source satellite. This estimate
+uses geographic locality to avoid granting the controller an unavailable
+ground-truth traffic matrix. It is an implementation aid to the sparse-aware
+allocator rather than the organizing principle of the system.
+
+We evaluate \sysname{} on a 1{,}584-satellite Starlink Shell-1
+constellation over observation ratios from $2\%$ to $50\%$. Under an
+identical deployable refinement layer, \sysname{} lowers median realized
+MLU relative to zero filling at all five ratios by $1.3\%$ to $7.9\%$, and
+achieves the best median among all evaluated allocators at $\rho=0.3$ and
+$0.5$. A TEST-inspired temporal baseline is stronger at several lower
+ratios, revealing that extreme sparsity remains the hardest regime rather
+than supporting an artificial claim of universal dominance. \sysname{}
+also operates in under $0.4$~s per snapshot and transfers to a
+one-third-scale constellation without changing its architecture.
 
 In summary, this paper makes the following contributions:
 \begin{itemize}
-    \item We formulate the sparse-observation TE problem for LEO
-    constellations, in which the controller meters only a fraction
-    $\rho$ of demands per epoch yet is evaluated by the realized MLU
-    that all traffic, observed or not, induces on the network.
-    \item We design \sysname{}, a sparse-aware learned allocator that
-    combines learnable mask embeddings, mask-aware gated message
-    passing, and temporal cross-attention, so that missing
-    measurements are represented explicitly rather than filled with
-    fabricated volumes.
-    \item We identify that the feasibility-repair step inherited from
-    full-observation TE reads the ground-truth traffic matrix, and we
-    design a deployable alternative whose rebalancing is driven by a
-    neighbor-based estimate computed from the observation alone,
-    showing how the information source handed to repair determines
-    its effectiveness under sparsity.
-    \item We evaluate \sysname{} at Starlink scale across observation
-    ratios from $2\%$ to $50\%$, demonstrating consistently lower
-    realized MLU than sparse adaptations of existing systems,
-    millisecond-level allocation latency, and retraining-free
-    transfer across constellation scales.
+    \item We formulate MLU-oriented TE for dynamic LEO constellations when
+    the controller observes only a fraction of demands but remains
+    responsible for the load induced by all traffic.
+    \item We design a sparse-aware allocator that combines learnable mask
+    embeddings, asymmetric graph gating, temporal encoding, and
+    cross-attention without requiring explicit traffic-matrix completion.
+    \item We exploit source-neighbor traffic correlation to estimate link
+    loads for optional deployment-time refinement using only information
+    available to a sparsely measuring controller.
+    \item We evaluate the design at Starlink scale against zero, mean,
+    neighbor, and TEST-inspired alternatives, identifying both its gains at
+    moderate observability and the remaining challenge at extreme sparsity.
 \end{itemize}
 
 The remainder of this paper is organized as follows.
-\Cref{sec:related} reviews related work on TE for satellite networks
-and learning-based TE. \Cref{sec:formulation} formulates the
-sparse-observation TE problem. \Cref{sec:design} presents the design
-of \sysname{}. \Cref{sec:eval} reports the experimental evaluation,
-and \cref{sec:conclusion} concludes the paper.
+\Cref{sec:related} reviews related work. \Cref{sec:formulation} formulates
+the sparse-observation TE problem. \Cref{sec:design} presents \sysname{}.
+\Cref{sec:eval} reports the evaluation, and \cref{sec:conclusion} concludes
+the paper.

@@ -1,6 +1,6 @@
-% TikZ 架构图（替换 architecture-draft.png）：
-% ①-④ 四阶段编号齐全；输入写作 O = D ⊙ M；repair 标注读取观测驱动的
-% 邻居估计 \hat{D}（observation-fed repair 叙事）。
+% TikZ 架构图：四阶段数据流清晰化。
+% ①掩码表示；②空间编码；③时空融合；④策略输出。
+% 邻居估算仅作为可选的部署后处理，不作为主流水线阶段。
 % 通过 \input{figures/architecture} 引入，外层用 resizebox 适配单栏。
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
@@ -40,34 +40,33 @@
 \end{scope}
 
 % ===== stage 1: mask-aware embedding =====
-\node[comp] (mask) at (3.45,1.2)
+\node[comp] (mask) at (3.25,1.2)
     {Mask-aware\\ embedding\\ (learnable $\theta_{\mathrm{mask}}$)};
 \node[num] at (mask.north west) {1};
 
 % ===== stage 2: gated FlowGNN =====
-\node[comp] (gnn) at (7.35,1.2)
-    {Gated FlowGNN\\ (asymmetric gating:\\ no placeholder volumes)};
+\node[comp] (gnn) at (6.65,1.2)
+    {Gated FlowGNN\\ (spatial encoding)};
 \node[num] at (gnn.north west) {2};
 
-% ===== stage 3: temporal transformer + fusion =====
-\node[tempo] (temp) at (4.7,-2.4)
+% ===== temporal encoder and stage 3 fusion =====
+\node[tempo] (temp) at (5.2,-2.1)
     {Temporal\\ Transformer};
-\node[num] at (temp.north west) {3};
 
-\node[tempo] (fuse) at (8.5,-0.7)
-    {Cross-attention fusion\\ ($Q$=temporal,\\ $K/V$=spatial)};
+\node[tempo] (fuse) at (9.65,1.2)
+    {Cross-attention\\ fusion};
 \node[num] at (fuse.north west) {3};
 
 % ===== stage 4: policy head =====
-\node[outb] (policy) at (12.0,-0.7)
+\node[outb] (policy) at (12.35,1.2)
     {Policy head\\ split ratios $\{r_i\}$};
 \node[num] at (policy.north west) {4};
 
-% ===== observation-fed repair =====
-\node[rep] (repair) at (12.0,-2.9)
-    {Observation-fed repair\\ (reads $\hat{D}^t$: neighbor\\ estimate from $O^t$)};
+% ===== optional neighbor-assisted refinement =====
+\node[rep] (repair) at (12.35,-1.65)
+    {Optional refinement\\ using neighbor estimate $\hat{D}^t$};
 
-\node[align=center] (alloc) at (12.0,-4.7) {Traffic\\ allocation};
+\node[align=center] (alloc) at (12.35,-3.25) {Traffic\\ allocation};
 
 % ===== sparse-aware dashed group =====
 \begin{scope}[on background layer]
@@ -75,23 +74,17 @@
           fit=(mask)(gnn)(temp)(fuse), inner sep=7pt] (group) {};
 \end{scope}
 \node[anchor=north, font=\small\itshape, text=red!70!black]
-    at (group.south) [yshift=-1mm] {sparse-aware components};
+    at (group.south) [yshift=-1mm] {sparse-aware allocator};
 
 % ===== arrows =====
 \draw[arr] (1.5,1.2) -- (mask.west);
 \draw[arr] (mask.east) -- (gnn.west);
-\draw[arr] (gnn.east) -| (fuse.north);
-\draw[arr] (1.6,-2.4) -- (temp.west);
+\draw[arr] (gnn.east) -- (fuse.west);
+\draw[arr] (1.6,-2.1) -- (temp.west);
 \draw[arr] (temp.east) -| (fuse.south);
 \draw[arr] (fuse.east) -- (policy.west);
 \draw[arr] (policy.south) -- (repair.north);
 \draw[arr] (repair.south) -- (alloc.north);
-% repair 读取的 \hat{D} 来自观测，已在 repair 框内文字说明，不另画长箭头
-
-% ===== bottom banner =====
-\node[draw=black!40, fill=black!8, rounded corners=2pt, inner sep=3.5pt,
-      font=\small] at (5.0,-4.7)
-    {Weights shared across demands, size-invariant: train once, zero retraining};
 
 \end{tikzpicture}%
 }

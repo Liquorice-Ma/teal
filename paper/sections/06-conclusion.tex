@@ -1,47 +1,31 @@
 \section{Conclusion}
 \label{sec:conclusion}
 
-% 性能立意结论：问题回顾 → SpaTE 方案与设计要点 → 结果总结 → 展望。
+This paper studied MLU-oriented traffic engineering for LEO satellite
+constellations when telemetry constraints expose only a small fraction of
+demands. We presented \sysname{}, a sparse-aware learned allocator that
+represents missing measurements explicitly, prevents placeholder traffic
+from contaminating graph messages, and combines spatial and temporal
+evidence before predicting path split ratios. Shared parameters and demand
+pruning keep the architecture independent of the instantaneous demand-set
+size.
 
-This paper addressed traffic engineering for LEO satellite
-constellations under sparse traffic observation, the operating mode
-that onboard resource limits and telemetry costs impose in practice: a
-controller that meters only a small fraction of demands must still
-allocate all traffic within milliseconds. We presented \sysname{}, a
-learning-based TE system designed end to end around the observation
-actually available. On the allocator side, \sysname{} represents
-unobserved demands with a learnable mask embedding, gates their message
-passing so that placeholders never contaminate link states, and fuses
-the history of sparse observations with the spatial graph
-representation through per-demand cross-attention. On the repair side,
-\sysname{} identifies that the feasibility-repair step inherited from
-full-observation systems implicitly reads the ground-truth traffic
-matrix, and replaces that dependence with a neighbor-based estimate
-computed purely from the observation, showing that the information
-source handed to repair, rather than the repair budget, is what
-determines its effectiveness under sparsity.
+On a 1{,}584-satellite Starlink constellation, \sysname{} reduces median
+realized MLU relative to zero filling at all observation ratios from $2\%$
+to $50\%$, with reductions of $1.3\%$ to $7.9\%$. It achieves the best
+median among all evaluated allocators at observation ratios $0.3$ and
+$0.5$, while a TEST-inspired temporal baseline performs better at several
+lower ratios. This boundary is itself informative: mask-aware spatial
+reasoning benefits from a minimally informative current observation,
+whereas extreme sparsity increases the value of temporal history. Without
+post-processing, the trained allocator wins 13 of 15 seed-matched
+comparisons against its untrained counterpart, confirming that learning
+contributes an allocation prior rather than merely inheriting gains from
+post-processing.
 
-On a 1{,}584-satellite Starlink constellation with population-driven
-traffic, \sysname{} achieves the lowest realized MLU among all sparse
-adaptations of existing systems at every observation ratio from $2\%$
-to $50\%$ under the identical deployable repair layer
-(\todo{headline numbers from overall\_main.csv}). The two components
-are complementary: learning improves the allocation prior at every
-observability level, repair corrects residual overloads, and the
-neighbor-fed estimate recovers most of the benefit of the undeployable
-oracle repair. \sysname{} additionally offers markedly lower seed
-variance and better worst-case MLU than zero-filling, transfers to a
-one-third-scale constellation without retraining, and infers in under
-$0.4$~s per snapshot with 4{,}468 parameters, comfortably within a
-constellation controller's compute envelope.
-
-Three directions remain open. First, replacing the heuristic
-rebalancing with a differentiable feasibility layer trained jointly
-with the allocator may let the two components share, rather than
-split, the observation. Second, the stability advantage suggests a
-dedicated training objective that explicitly optimizes worst-case MLU
-rather than the mean. Third, measurement scheduling, deciding
-\emph{which} demands to observe next, is a natural extension: once
-both the allocator and the repair estimate are driven by the
-observation, each additional measurement improves them jointly, and
-the observation budget itself becomes a control variable.
+For deployment, a source-neighbor estimate can provide optional
+post-processing with a useful congestion signal without access to the
+complete traffic matrix. This is a supporting mechanism, not a substitute
+for the sparse-aware allocator. Future work should improve the extreme
+sparsity regime through adaptive measurement scheduling, longer-horizon
+temporal models, and objectives that explicitly control worst-case MLU.
