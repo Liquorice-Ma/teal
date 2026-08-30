@@ -1,0 +1,47 @@
+**ELATE — Oral Speech Script** | IEEE PIMRC 2026 | He Ma, BUPT
+
+---
+
+**[S1 Cover]** Good afternoon everyone. My name is He Ma, from the Beijing University of Posts and Telecommunications. Today it is my pleasure to present our work titled "ELATE: Elephant Flow-aware Learning-Accelerated Traffic Engineering in Large-Scale LEO Constellation."
+
+**[S2 Outline]** The talk has five parts: introduction, problem formulation, our proposed ELATE method, simulation results, and conclusion. Let's begin with the background and motivation.
+
+***Part I — Introduction***
+
+**[S4 Rise of LEO]** Internet traffic is growing explosively, and terrestrial infrastructure alone cannot keep up. LEO mega-constellations — Starlink, OneWeb — offer three key strengths. First, global coverage: they reach remote regions that terrestrial links simply cannot serve. Second, ultra-low latency: at about five-hundred-fifty-kilometer altitude, one-way delay is roughly ten milliseconds. Third, massive scale: Starlink Phase One consists of fifteen hundred and eighty-four satellites in seventy-two orbits of twenty-two, as illustrated on the right. However, these satellites orbit at twenty-seven thousand kilometers per hour, so the topology changes continuously. On top of that, the traffic is bursty and highly non-uniform. Together, these factors push existing TE solvers to their limits — and this is exactly what motivates the new approach we present.
+
+**[S5 Why TE is Hard]** So, why is traffic engineering particularly hard in LEO? There are three main reasons. First, satellites are extremely dynamic, causing the network topology to change continuously and routing to be re-optimized very frequently. Second, the network is massive in scale — there are thousands of nodes and links with fluctuating demands, creating an enormous solution space. Third, a speed-quality dilemma — traditional linear programming produces good solutions, but it takes about thirty-five seconds for a single traffic matrix, which is far too slow for real-time operation. Existing heuristic methods either fail to scale, or they sacrifice congestion control. Therefore, we need a method that is both fast and high-quality.
+
+***Part II — Problem Formulation***
+
+**[S7 System Model]** We model the constellation as a graph G, where vertices are satellites and edges are inter-satellite links. Under the Plus-Grid topology shown on the right, each satellite connects to four neighbors — two within the same orbit, two toward adjacent orbits — and the links wrap around at the boundaries, forming a torus of fifteen hundred and eighty-four nodes. Our objective is to minimize the Maximum Link Utilization, denoted eta — the highest load-to-capacity ratio across all links. The decision variables are flow-splitting ratios: for each demand, what fraction of traffic is placed on each candidate path. These are subject to capacity, demand-conservation, and non-negativity constraints.
+
+**[S8 Key Insight]** Now let me highlight the key insight behind ELATE. In real networks, traffic is heavy-tailed. The figures on the right show measured traffic matrices over time: traffic is mostly near zero but occasionally spikes by orders of magnitude. In other words, a small number of elephant flows dominate congestion and form the bottlenecks — these need sophisticated, learning-based routing. The vast majority are mice flows, lightweight demands contributing only marginally. Our strategy is decompose and conquer: offload mice flows to shortest paths, drastically shrinking the solution space, then focus all computational effort on optimizing the critical elephant flows. This single decision is what makes ELATE so fast, as I will demonstrate later.
+
+***Part III — Proposed ELATE Method***
+
+**[S10 Pipeline]** ELATE is a three-stage pipeline. Stage one is flow identification, where we separate the elephant flows from the mice flows. Stage two is GNN embedding, where a graph neural network turns the network state into rich representations. And stage three is multi-agent reinforcement learning, which decides how to route the elephant flows. Let me explain each stage.
+
+**[S11 Stage 1]** Stage one: elephant-flow identification. We apply a statistical threshold — tau equals mu plus lambda times sigma, where mu and sigma are the mean and standard deviation of the traffic matrix. Flows above the threshold are classified as elephants and receive learned routing; flows below are mice and take shortest paths. We found that lambda equals five works best — I will justify this with data shortly. We also exploit the LEO grid's translation invariance: pre-compute candidate paths once from a virtual origin and cache them, then simply shift for any source-destination pair. This reduces the path-generation complexity from quadratic to linear in the number of nodes.
+
+**[S12 Stage 2]** Stage two: GNN embedding. We construct a time-dependent bipartite graph with two types of nodes: active links and candidate paths, connected by inclusion edges that record which links belong to which path. The aggregation operator A-t sums traffic along each path, and A-t-transpose gathers the congestion of every link on that path. This lets the graph capture both demand and supply information. We then interleave GNN layers and DNN layers. The GNN layers perform message passing between links and paths to capture their mutual interference — paths sharing a link compete for bandwidth. The DNN layers coordinate across flows and enforce that each flow's splitting ratios sum to one. This edge-centric design captures interference that ordinary node-based GNNs completely miss.
+
+**[S13 Stage 3]** Stage three: multi-agent reinforcement learning. We treat each elephant flow as an independent agent. Each agent observes its own local state — the embeddings of its candidate paths from the GNN — and outputs continuous flow-splitting ratios through a shared stochastic policy network. The global reward is the negative of maximum link utilization, so all agents cooperate to reduce congestion. A critical domain insight: traffic engineering is a one-step process — today's routing does not affect future demands, so the expected return equals the immediate global reward. We leverage this by using a counterfactual baseline estimated through Monte-Carlo sampling to isolate each agent's marginal contribution. This provides unbiased gradients and enables stable, end-to-end multi-agent policy training.
+
+***Part IV — Simulation Results***
+
+**[S15 Setup]** We evaluate on full Starlink Phase One — fifteen hundred and eighty-four satellites in seventy-two by twenty-two, Plus-Grid topology. For traffic, we use a random gravity model. We generate one hundred GDP and one hundred population traffic matrices. The statistics in the table reveal a heavy tail — under GDP traffic the mean is about twelve, but the maximum exceeds one thousand. This confirms that the elephant-mice split is well-motivated.
+
+**[S16 λ Sensitivity]** How do we set lambda? These CDF plots sweep the threshold from three-sigma to ten-sigma for both traffic types. In both GDP and population traffic, lambda equals five — the green curve — consistently sits furthest to the left, meaning the lowest MLU. Therefore we fix lambda at five in all experiments.
+
+**[S17 MLU Results]** Now the main load-balancing result. These boxplots compare ELATE against five baselines: shortest path, shortest edge, LP, local search, and CESLP. ELATE is the rightmost box — lower is better. ELATE consistently achieves the lowest median MLU, reducing utilization by eight to twenty-nine percent compared with every baseline, including the LP-based optimizer. Our learning-based approach matches or exceeds optimization-based methods in solution quality.
+
+**[S18 Speed]** But the most important advantage of ELATE is speed. ELATE allocates a traffic matrix in just ten-point-six milliseconds — that is eleven to over three thousand times faster than the baselines. LP takes nearly thirty-five seconds; local search and CESLP take more than a minute. Why so fast? Because training is done offline. At runtime, inference is a single feedforward pass — fully parallelizable on GPU, with no iterative solver in the loop. This is what makes millisecond-scale traffic engineering feasible for a topology that changes every few seconds.
+
+**[S19 Ablation]** The ablation study confirms that every component is necessary. Removing the elephant-mice split overwhelms the network with state complexity. Replacing our edge-centric GNN with a node-based one degrades performance sharply, especially under population traffic. Replacing RL with direct surrogate-loss minimization hurts both quality and robustness. The full ELATE consistently achieves the lowest MLU, confirming all three components work.
+
+***Part V — Conclusion***
+
+**[S21 Takeaways]** First, we exploit the heavy-tailed structure of traffic to reduce solution-space complexity. Second, our topology-aware bipartite GNN captures the path-link interference that node-centric models miss. Third, multi-agent RL with counterfactual credit assignment enables robust decentralized routing. And fourth, ELATE achieves real-time performance — eight to twenty-nine percent MLU reduction, with a speedup of eleven to over three thousand times, enabling millisecond-scale allocation that keeps pace with a constantly moving constellation.
+
+**[S22]** This brings us to the end of our presentation. Thank you very much for your attention.
