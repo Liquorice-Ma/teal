@@ -44,4 +44,4 @@
 
 **[S21 Takeaways]** First, we exploit the heavy-tailed structure of traffic to reduce solution-space complexity. Second, our topology-aware bipartite GNN captures the path-link interference that node-centric models miss. Third, multi-agent RL with counterfactual credit assignment enables robust decentralized routing. And fourth, ELATE achieves real-time performance — eight to twenty-nine percent MLU reduction, with a speedup of eleven to over three thousand times, enabling millisecond-scale allocation that keeps pace with a constantly moving constellation.
 
-**[S22]** This brings us to the end of our presentation. Thank you very much for your attention.
+**[S22]** That concludes our presentation on this paper. Thank you all for listening.
