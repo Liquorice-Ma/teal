@@ -48,8 +48,8 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
 
 \begin{figure}[t]
     \centering
-    % TikZ 矢量图（figures/architecture.tex），替换早期 ImageGen 草稿 PNG
-    \input{figures/architecture}
+    % 位图版式（figures/edit_architecture_png.py 在草稿基础上做像素级修订）
+    \includegraphics[width=\linewidth]{figures/architecture-v1-edited.png}
     \caption{\sysname{} overview: a sparse observation is embedded with
     mask awareness, processed by a gated flow-centric GNN in parallel with a
     temporal encoder, fused via per-demand cross-attention, and mapped to

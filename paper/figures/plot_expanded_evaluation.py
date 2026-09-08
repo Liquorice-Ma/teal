@@ -125,7 +125,8 @@ def main_distribution(cells):
         ax.set_xticklabels(["SpaTE", "TEST", "zero", "mean", "nbr", "untr."], rotation=55, ha="right")
         ax.grid(axis="y")
     axes[0].set_ylabel("MLU per training seed\n(11-snapshot test average)")
-    finish(fig, "overall_distribution.pdf", left=0.075, bottom=0.34)
+    # two-line ylabel: needs a wider left margin than the single-line panels
+    finish(fig, "overall_distribution.pdf", left=0.105, bottom=0.34)
 
 
 def internal_training(cells):
@@ -145,7 +146,8 @@ def internal_training(cells):
         ax.set_xticklabels(["untrained", "SpaTE"], rotation=25, ha="right")
         ax.grid(axis="y")
     axes[0].set_ylabel("MLU with common\nneighbor refinement")
-    finish(fig, "internal_training.pdf", left=0.075, bottom=0.33)
+    # two-line ylabel: needs a wider left margin than the single-line panels
+    finish(fig, "internal_training.pdf", left=0.105, bottom=0.33)
 
 
 def component_lowrho():

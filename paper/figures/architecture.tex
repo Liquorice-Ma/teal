@@ -1,90 +1,157 @@
-% TikZ 架构图：四阶段数据流清晰化。
-% ①掩码表示；②空间编码；③时空融合；④策略输出。
-% 邻居估算仅作为可选的部署后处理，不作为主流水线阶段。
+% TikZ 架构图：按 ImageGen 草稿 v2 的五栏版式矢量重绘。
+% 分栏：输入 → ①掩码表示 → ②门控空间编码 → ③时空融合 → ④策略输出；
+% 邻居估算仅作为 ④ 内的可选部署后处理，不使用 ADMM/真值 TM。
 % 通过 \input{figures/architecture} 引入，外层用 resizebox 适配单栏。
 \resizebox{\linewidth}{!}{%
 \begin{tikzpicture}[
     font=\small,
-    box/.style={draw, rounded corners=2pt, align=center, inner sep=4pt,
-                minimum height=11mm, line width=0.7pt},
-    comp/.style={box, fill=orange!15, draw=orange!70!black},
-    tempo/.style={box, fill=violet!12, draw=violet!60!black},
-    outb/.style={box, fill=green!12, draw=green!45!black},
-    rep/.style={box, fill=blue!8, draw=blue!55!black},
-    num/.style={circle, draw=black!70, fill=white, inner sep=1.2pt,
+    box/.style={draw, rounded corners=2pt, align=center, inner sep=3.5pt,
+                line width=0.7pt},
+    tempo/.style={box, fill=violet!15, draw=violet!60!black},
+    outb/.style={box, fill=green!15, draw=green!45!black},
+    rep/.style={box, fill=blue!8, draw=blue!55!black, font=\footnotesize},
+    num/.style={circle, fill=white, inner sep=1.4pt,
                 font=\footnotesize\bfseries, line width=0.6pt},
+    head/.style={font=\small\bfseries, text=white, align=center},
+    caplbl/.style={align=center, font=\footnotesize},
+    pnode/.style={circle, draw=black!60, minimum size=3.4mm, inner sep=0pt,
+                  line width=0.5pt},
+    enode/.style={rectangle, draw=black!60, minimum size=3.2mm, inner sep=0pt,
+                  fill=violet!45, line width=0.5pt},
     arr/.style={-{Stealth[length=2.2mm]}, line width=0.8pt, draw=black!75},
-    obsarr/.style={arr, dashed, draw=blue!55!black},
+    tarr/.style={arr, draw=blue!60!black},
+    sarr/.style={arr, draw=orange!85!black},
+    garr/.style={arr, draw=green!45!black},
+    gcut/.style={dashed, line width=0.7pt, draw=red!70!black},
     every node/.style={font=\small}
 ]
 
-% ===== inputs =====
-% sparse observation grid: blue = observed, gray = unobserved
-\begin{scope}[shift={(0,0.55)}]
-    \foreach \i/\j in {0/3, 2/3, 1/2, 3/2, 0/1, 2/0, 3/0}
-        \fill[blue!45] (\i*0.32, \j*0.32) rectangle ++(0.32, 0.32);
-    \foreach \i/\j in {1/3, 3/3, 0/2, 2/2, 1/1, 2/1, 3/1, 0/0, 1/0}
-        \fill[black!18] (\i*0.32, \j*0.32) rectangle ++(0.32, 0.32);
-    \draw[step=0.32, black!60, line width=0.4pt] (0,0) grid (1.28,1.28);
-    \node[anchor=north, align=center] at (0.64,-0.12)
-        {Sparse observation\\ $O^t = D^t \odot M$};
-\end{scope}
+% ===== panel bodies =====
+\fill[blue!10, rounded corners=5pt]    (0.0,0)  rectangle (3.0,7.4);
+\fill[orange!14, rounded corners=5pt]  (3.4,0)  rectangle (6.4,7.4);
+\fill[orange!14, rounded corners=5pt]  (6.8,0)  rectangle (9.8,7.4);
+\fill[violet!10, rounded corners=5pt]  (10.2,0) rectangle (13.2,7.4);
+\fill[green!10, rounded corners=5pt]   (13.6,0) rectangle (16.6,7.4);
 
-% history stack
-\begin{scope}[shift={(0.1,-2.75)}]
-    \fill[blue!10, draw=black!50, line width=0.4pt] (0.24,0.24) rectangle ++(1.1,0.85);
-    \fill[blue!14, draw=black!55, line width=0.4pt] (0.12,0.12) rectangle ++(1.1,0.85);
-    \fill[blue!18, draw=black!60, line width=0.4pt] (0,0) rectangle ++(1.1,0.85);
-    \node[anchor=north, align=center] at (0.67,-0.15)
-        {History $H^t$\\ ($L$ snapshots)};
-\end{scope}
+% ===== panel headers =====
+\fill[blue!55!black, rounded corners=5pt]   (0.0,6.55)  rectangle (3.0,7.4);
+\fill[orange!75!black, rounded corners=5pt] (3.4,6.55)  rectangle (6.4,7.4);
+\fill[orange!75!black, rounded corners=5pt] (6.8,6.55)  rectangle (9.8,7.4);
+\fill[violet!55!black, rounded corners=5pt] (10.2,6.55) rectangle (13.2,7.4);
+\fill[green!40!black, rounded corners=5pt]  (13.6,6.55) rectangle (16.6,7.4);
+\node[head] at (1.5,6.975)  {Input};
+\node[head] at (4.9,6.975)  {Mask-aware\\[-1pt] embedding};
+\node[head] at (8.3,6.975)  {Gated\\[-1pt] FlowGNN};
+\node[head] at (11.7,6.975) {Temporal\\[-1pt] fusion};
+\node[head] at (15.1,6.975) {Policy\\[-1pt] head};
+% stage badges match the four stages (i)-(iv) in the overview text
+\node[num, text=orange!75!black] at (6.12,7.12)  {1};
+\node[num, text=orange!75!black] at (9.52,7.12)  {2};
+\node[num, text=violet!55!black] at (12.92,7.12) {3};
+\node[num, text=green!40!black]  at (16.32,7.12) {4};
+
+% ===== input panel: sparse TM, binary mask, history stack =====
+\fill[black!15] (0.75,4.85) rectangle (2.25,6.35);
+\foreach \i/\j in {0/4, 2/4, 4/4, 1/3, 3/3, 0/2, 3/2, 2/1, 4/1, 1/0, 3/0}
+    \fill[blue!50] (0.75+\i*0.3, 4.85+\j*0.3) rectangle ++(0.3,0.3);
+\draw[step=0.3, black!55, line width=0.4pt, shift={(0.75,4.85)}]
+    (0,0) grid (1.5,1.5);
+\node[caplbl, anchor=north] at (1.5,4.68)
+    {Sparse traffic matrix\\ $O^t = D^t \odot M$};
+
+\foreach \i in {0, 2, 4}
+    \fill[blue!30] (0.69+\i*0.27, 3.35) rectangle ++(0.27,0.27);
+\foreach \i in {1, 3, 5}
+    \fill[black!12] (0.69+\i*0.27, 3.35) rectangle ++(0.27,0.27);
+\foreach \i/\v in {0/1, 1/0, 2/1, 3/0, 4/1, 5/0}
+    \node[font=\tiny] at (0.825+\i*0.27, 3.485) {$\v$};
+\draw[black!55, line width=0.4pt] (0.69,3.35) rectangle (2.31,3.62);
+\node[caplbl, anchor=north] at (1.5,3.2) {Binary mask $M$};
+
+\fill[blue!10, draw=black!50, line width=0.4pt] (1.09,1.59) rectangle ++(1.1,0.8);
+\fill[blue!16, draw=black!55, line width=0.4pt] (0.97,1.47) rectangle ++(1.1,0.8);
+\fill[blue!22, draw=black!60, line width=0.4pt] (0.85,1.35) rectangle ++(1.1,0.8);
+\node[caplbl, anchor=north] at (1.5,1.18) {History $H^t$\\ ($L$ snapshots)};
 
 % ===== stage 1: mask-aware embedding =====
-\node[comp] (mask) at (3.25,1.2)
-    {Mask-aware\\ embedding\\ (learnable $\theta_{\mathrm{mask}}$)};
-\node[num] at (mask.north west) {1};
+\fill[black!15] (4.45,5.3) rectangle (5.35,6.2);
+\foreach \i/\j in {0/2, 2/1, 1/0}
+    \fill[blue!50] (4.45+\i*0.3, 5.3+\j*0.3) rectangle ++(0.3,0.3);
+\draw[step=0.3, black!55, line width=0.4pt, shift={(4.45,5.3)}]
+    (0,0) grid (0.9,0.9);
+\node[box, draw=red!70!black, dashed, fill=red!6, align=center] (theta)
+    at (4.9,4.0) {$\phi$ (learnable)};
+\draw[gcut, -{Stealth[length=1.8mm]}] (4.75,5.25) -- (4.75,4.45);
+\draw[gcut, -{Stealth[length=1.8mm]}] (5.05,5.25) -- (5.05,4.45);
+\node[caplbl] at (4.9,2.6)
+    {observed entries\\ pass through;\\ unobserved entries\\ take the embedding};
 
-% ===== stage 2: gated FlowGNN =====
-\node[comp] (gnn) at (6.65,1.2)
-    {Gated FlowGNN\\ (spatial encoding)};
-\node[num] at (gnn.north west) {2};
+% ===== stage 2: gated FlowGNN (bipartite path/link graph) =====
+\node[pnode, fill=blue!50]  (p1) at (7.45,6.0)  {};
+\node[pnode, fill=blue!50]  (p2) at (7.45,5.3)  {};
+\node[pnode, fill=black!25] (p3) at (7.45,4.6)  {};
+\node[pnode, fill=blue!50]  (p4) at (7.45,3.9)  {};
+\node[enode] (e1) at (9.15,5.75) {};
+\node[enode] (e2) at (9.15,4.95) {};
+\node[enode] (e3) at (9.15,4.15) {};
+\draw[arr, line width=0.5pt] (p1) -- (e1);
+\draw[arr, line width=0.5pt] (p1) -- (e2);
+\draw[arr, line width=0.5pt] (p2) -- (e1);
+\draw[arr, line width=0.5pt] (p2) -- (e3);
+\draw[arr, line width=0.5pt] (p4) -- (e2);
+\draw[arr, line width=0.5pt] (p4) -- (e3);
+\draw[gcut] (p3) -- (e1);
+\draw[gcut] (p3) -- (e3);
+\node[text=red!70!black, font=\footnotesize\bfseries] at (8.3,5.35) {$\times$};
+\node[text=red!70!black, font=\footnotesize\bfseries] at (8.3,4.25) {$\times$};
+\node[caplbl, anchor=north] at (7.45,3.62) {paths};
+\node[caplbl, anchor=north] at (9.15,3.62) {links};
+\node[caplbl] at (8.3,2.5)
+    {gating cuts path$\to$link\\ messages from unobserved\\ paths; link$\to$path kept};
 
-% ===== temporal encoder and stage 3 fusion =====
-\node[tempo] (temp) at (5.2,-2.1)
-    {Temporal\\ Transformer};
-
-\node[tempo] (fuse) at (9.65,1.2)
+% ===== stage 3: temporal encoder + cross-attention fusion =====
+\node[tempo] (trans) at (11.7,5.6) {Temporal\\ Transformer};
+\node[tempo, minimum width=24mm] (fusebox) at (11.7,3.3)
     {Cross-attention\\ fusion};
-\node[num] at (fuse.north west) {3};
+\draw[tarr] (trans.south) -- node[right, font=\footnotesize]{$Q$}
+    (fusebox.north);
+\node[caplbl] at (11.7,2.2) {$Q$ = temporal\\ $K/V$ = spatial};
 
-% ===== stage 4: policy head =====
-\node[outb] (policy) at (12.35,1.2)
-    {Policy head\\ split ratios $\{r_i\}$};
-\node[num] at (policy.north west) {4};
+% ===== stage 4: policy head + optional refinement =====
+\node[outb] (policy) at (15.1,5.7) {Shared policy head\\ split ratios $\{r_i\}$};
+\node[rep] (refine) at (15.1,3.6)
+    {Optional refinement\\ neighbor estimate $\hat{D}^t$};
+\node[box, fill=green!45!black, text=white] (alloc) at (15.1,1.7)
+    {Traffic\\ allocation};
+\draw[garr] (policy.south) -- (refine.north);
+\draw[garr] (refine.south) -- (alloc.north);
 
-% ===== optional neighbor-assisted refinement =====
-\node[rep] (repair) at (12.35,-1.65)
-    {Optional refinement\\ using neighbor estimate $\hat{D}^t$};
+% ===== cross-panel data flow =====
+\draw[arr] (3.03,5.6) -- (3.37,5.6);
+\draw[arr] (6.43,4.6) -- (6.77,4.6);
+% spatial embeddings feed cross-attention as K/V
+\draw[sarr, rounded corners=3pt] (9.35,4.95) -- (10.0,4.95) -- (10.0,3.3)
+    -- (fusebox.west);
+\node[caplbl, text=orange!85!black] at (10.02,5.5) {spatial\\ $K/V$};
+% temporal stream: history bypasses the spatial branch
+\draw[tarr, rounded corners=4pt] (2.2,1.75) -- (2.6,1.75) -- (2.6,1.0)
+    -- (10.35,1.0) -- (10.35,5.6) -- (trans.west);
+\node[caplbl, text=blue!60!black, anchor=north] at (6.5,0.95) {temporal stream};
+% fused embedding to the policy head
+\draw[arr, rounded corners=3pt] (fusebox.east) -- (13.4,3.3) -- (13.4,5.7)
+    -- (policy.west);
 
-\node[align=center] (alloc) at (12.35,-3.25) {Traffic\\ allocation};
+% ===== sparse-aware dashed group over stages 1-3 =====
+\draw[red!70!black, dashed, rounded corners=6pt, line width=0.8pt]
+    (3.28,-0.12) rectangle (13.32,7.52);
+\node[fill=red!12, rounded corners=3pt, font=\small\itshape,
+      text=red!70!black, inner sep=2.5pt] at (8.3,7.52)
+    {sparse-aware components};
 
-% ===== sparse-aware dashed group =====
-\begin{scope}[on background layer]
-    \node[draw=red!70!black, dashed, rounded corners=6pt, line width=0.8pt,
-          fit=(mask)(gnn)(temp)(fuse), inner sep=7pt] (group) {};
-\end{scope}
-\node[anchor=north, font=\small\itshape, text=red!70!black]
-    at (group.south) [yshift=-1mm] {sparse-aware allocator};
-
-% ===== arrows =====
-\draw[arr] (1.5,1.2) -- (mask.west);
-\draw[arr] (mask.east) -- (gnn.west);
-\draw[arr] (gnn.east) -- (fuse.west);
-\draw[arr] (1.6,-2.1) -- (temp.west);
-\draw[arr] (temp.east) -| (fuse.south);
-\draw[arr] (fuse.east) -- (policy.west);
-\draw[arr] (policy.south) -- (repair.north);
-\draw[arr] (repair.south) -- (alloc.north);
+% ===== bottom banner: weight sharing / zero retraining =====
+\fill[black!12, rounded corners=4pt] (0.0,-1.1) rectangle (16.6,-0.4);
+\node at (8.3,-0.75) {All learnable weights are shared across demands and
+    size-invariant: train once, reuse under demand-set and topology drift};
 
 \end{tikzpicture}%
 }
