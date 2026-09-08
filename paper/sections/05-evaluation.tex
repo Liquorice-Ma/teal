@@ -75,19 +75,20 @@ demand set to the ${\sim}6.3$K pairs that ever carry traffic, out of
 evaluated against ground-truth demands (lower is better); flow
 conservation in \cref{eq:conserve} is enforced by construction, so MLU
 cannot be gamed by under-serving traffic. We sweep the observation
-ratio $\rho \in \{0.02, 0.05, 0.1, 0.3, 0.5\}$ and run three random
-seeds per configuration. Unless stated otherwise, every method is
+ratio $\rho \in \{0.02, 0.05, 0.1, 0.3, 0.5\}$ and run five random
+training seeds per configuration. Unless stated otherwise, every method is
 paired with the \emph{identical deployable post-processing layer}: two
 rebalancing sweeps whose utilization estimate reads only the sparse
 observation with neighbor fill (\textsc{obs-nbr}, \cref{sec:training}),
 so that no method receives unavailable demand information and the
 allocator remains the only factor that varies. The \textsc{oracle} variant,
 which reads the ground-truth matrix, appears only in the neighbor-estimation
-sensitivity analysis. Because seed-to-seed
-variation is comparable to between-configuration differences, headline
-comparisons are \emph{paired} on $(\rho, \text{seed})$ and assessed
-with two-sided sign tests; we report win counts and medians rather
-than pooled means.
+diagnostic. Each point reported below is the mean MLU over the same eleven
+chronological test snapshots for one training seed. We show all five seed
+points and summarize them by mean$\pm$standard deviation, median, and range.
+Because the snapshots in a trace are temporally correlated, headline
+comparisons are paired on $(\rho,\text{seed})$, not on snapshots, and are
+assessed with two-sided sign tests.
 
 \textbf{Baselines.} All learned baselines share the training pipeline,
 path sets, and optional neighbor-assisted refinement of \sysname{} and differ
@@ -113,12 +114,8 @@ only in how they handle sparsity:
     claiming reproduction of TEST's original terrestrial setup.
     \item \emph{untrained}: the \sysname{} architecture with weights
     frozen at random initialization, isolating the contribution of
-    training.
-    \item \emph{full observation}: \sysname{} given the complete
-    matrix ($\rho=1$), an upper reference on input information.
-    \item \emph{LP oracle}: the per-snapshot optimum of
-    \crefrange{eq:mlu}{eq:mlu-nonneg} solved on ground-truth demands,
-    a lower bound no online method can beat.
+    training. The LP optimum is used only as an information-theoretic
+    reference, not as an online baseline.
 \end{itemize}
 
 \begin{table}[t]
@@ -160,111 +157,139 @@ random initialization and differs only in skipping gradient updates
 \emph{training} factor with identical architecture, mask embedding, and
 post-processing.
 
-\subsection{Overall Performance}
+\subsection{Seed-Level Behavior of \sysname{}}
+\label{sec:allocator-isolation}
+
+We first examine the complete deployed pipeline itself, rather than starting
+with a ranking against other methods. \Cref{fig:internal-training} plots all
+five seed-level test averages for \sysname{} and its untrained counterpart
+under the common neighbor-assisted refinement. Training wins 14 of the 25
+matched $(\rho,\text{seed})$ pairs, loses 11, and has no ties (two-sided
+sign test $p=0.690$). At $\rho=0.5$, for example, the mean is
+$1.639\pm0.074$ after training versus $1.757\pm0.107$ without training;
+at the other ratios the paired outcomes are mixed. Thus these data do not
+establish a statistically significant end-to-end training advantage, but
+they expose the seed sensitivity that a single aggregate score would hide.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figs/internal_training.pdf}
+    \caption{Internal check of the deployed pipeline. Every marker is one
+    training seed averaged over the same 11 chronological test snapshots;
+    a gray segment pairs identical seeds and a black bar marks the mean.
+    The common neighbor-assisted refinement is enabled for both endpoints.}
+    \label{fig:internal-training}
+\end{figure*}
+
+We next test the three representation choices without post-processing at the
+two sparsest ratios, where their effect is least likely to be hidden by
+rebalancing. \Cref{fig:component-lowrho} reports every available seed. The
+outcomes are mixed: no configuration dominates the others at both ratios,
+and the three-seed diagnostic is insufficient for a component-level
+performance claim. We therefore retain the placeholder-isolation result of
+\cref{prop:isolation} as a structural property, rather than interpreting it
+as proof that gating, masking, or temporal encoding always lowers MLU.
+
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=0.76\textwidth]{figs/component_lowrho.pdf}
+    \caption{Low-observability component diagnostic without post-processing
+    (three seeds). Dots are seed-level test averages and black bars are
+    means. The mixed ordering motivates reporting the module choices as
+    design alternatives rather than claiming a uniform component gain.}
+    \label{fig:component-lowrho}
+\end{figure*}
+
+\subsection{Sensitivity to the Neighbor Estimate}
+\label{sec:neighbor-estimate}
+
+The optional refinement pass needs an estimated traffic matrix only to rank
+candidate paths by congestion. \Cref{fig:neighbor-ladder} fixes the
+untrained control at $\rho=0.3$ and shows all three diagnostic seeds.
+Moving from no post-processing (median $2.833$) to an observation with zeros
+elsewhere ($2.295$), and then to the source-neighbor estimate ($1.740$),
+substantially changes the congestion signal available to the rebalancer. The
+oracle reference reaches $1.599$, but uses unavailable ground-truth traffic
+and five sweeps; it is a ceiling reference rather than a protocol-matched
+baseline. The deployable conclusion is therefore limited to the value of the
+neighbor estimate over zero filling, not a claim that post-processing is the
+central learned mechanism.
+
+\begin{figure}[t]
+    \centering
+    \includegraphics[width=\linewidth]{figs/neighbor_ladder.pdf}
+    \caption{Seed-level diagnostic for the traffic estimate used by
+    post-processing at $\rho=0.3$. Black bars denote medians. The oracle
+    point is an unavailable five-sweep reference; deployed methods use the
+    observation-derived estimate.}
+    \label{fig:neighbor-ladder}
+\end{figure}
+
+\subsection{External Comparison}
 \label{sec:overall}
 
-\Cref{tab:overall} reports median realized MLU across the full
-observability range. All methods use the same neighbor-assisted
-post-processing, so the comparison isolates the learned allocator.
+After the internal checks, we compare with external sparsity treatments.
+\Cref{fig:overall-distribution} exposes all 150 seed-level results, while
+\cref{tab:overall} gives their numerical summary. No method has a uniform
+advantage across observation ratios. In particular, \sysname{} records
+16 wins and 9 losses against zero filling, but the paired sign test gives
+$p=0.2295$; its comparisons with TEST-inspired, mean-interp, nbr-fill, and
+untrained controls are likewise non-significant (\cref{tab:paired}). Hence
+we report the observed rankings and variability rather than claim overall
+superiority.
 
-\begin{table}[t]
-    \caption{Overall comparison: median realized MLU (3 seeds) under
-    the deployable protocol, in which every method uses the identical
-    observation-derived neighbor estimate. Lower is better; best per column
-    in bold.}
+\begin{figure*}[t]
+    \centering
+    \includegraphics[width=\textwidth]{figs/overall_distribution.pdf}
+    \caption{Complete five-seed external comparison under the same deployed
+    neighbor-assisted refinement. Each marker is one seed's average MLU over
+    the 11 test snapshots; black bars mark means. The dispersion explains why
+    column-wise rankings based only on a median are not reliable evidence of
+    a general advantage.}
+    \label{fig:overall-distribution}
+\end{figure*}
+
+\begin{table*}[t]
+    \caption{External comparison under the aligned deployable protocol.
+    Entries are mean$\pm$standard deviation across five training seeds;
+    \cref{fig:overall-distribution} shows every seed value and the exported
+    supplementary CSV gives medians and ranges. Lower MLU is better.}
     \label{tab:overall}
     \centering
-    \footnotesize
-    \setlength{\tabcolsep}{4pt}
+    \scriptsize
+    \setlength{\tabcolsep}{5pt}
     \begin{tabular}{@{}lccccc@{}}
         \toprule
         & \multicolumn{5}{c}{observation ratio $\rho$} \\
         \cmidrule(lr){2-6}
         Method & 0.02 & 0.05 & 0.1 & 0.3 & 0.5 \\
         \midrule
-        \sysname{}    & 1.7364 & 1.8162 & 1.8163 & \textbf{1.7217} & \textbf{1.6241} \\
-        TEST-inspired~\cite{test} & \textbf{1.7273} & \textbf{1.7186} & \textbf{1.7260} & 1.7852 & 1.6880 \\
-        zero-fill~\cite{teal,sate} & 1.7939 & 1.8577 & 1.9120 & 1.7435 & 1.7632 \\
-        mean-interp   & 1.7373 & 1.8417 & 1.9499 & 1.7788 & 1.6818 \\
-        nbr-fill      & 1.7432 & 1.8606 & 1.8067 & 1.7642 & 1.7042 \\
-        untrained     & 1.9251 & 1.8011 & 1.8365 & 1.7395 & 1.8659 \\
+        \sysname{} & $1.874\pm0.203$ & $1.885\pm0.093$ & $1.786\pm0.089$ & $1.737\pm0.085$ & $1.639\pm0.074$ \\
+        TEST-inspired~\cite{test} & $1.809\pm0.100$ & $1.833\pm0.145$ & $1.773\pm0.083$ & $1.769\pm0.056$ & $1.639\pm0.127$ \\
+        zero-fill~\cite{teal,sate} & $1.805\pm0.026$ & $1.876\pm0.061$ & $1.856\pm0.065$ & $1.719\pm0.038$ & $1.705\pm0.142$ \\
+        mean-interp & $1.877\pm0.152$ & $1.840\pm0.035$ & $1.939\pm0.103$ & $1.732\pm0.050$ & $1.682\pm0.091$ \\
+        nbr-fill & $1.756\pm0.079$ & $1.867\pm0.038$ & $1.839\pm0.078$ & $1.745\pm0.054$ & $1.680\pm0.114$ \\
+        untrained & $1.890\pm0.073$ & $1.902\pm0.121$ & $1.781\pm0.068$ & $1.716\pm0.044$ & $1.757\pm0.107$ \\
         \bottomrule
     \end{tabular}
-\end{table}
-
-The results reveal two operating regimes. At moderate observability,
-\sysname{} achieves the best median MLU, leading all evaluated allocators at
-$\rho=0.3$ and $0.5$. Across the full range, it also lowers median MLU
-relative to zero filling by $1.3\%$ to $7.9\%$ and beats zero filling in
-11 of 15 seed-matched cells. At lower observability, the TEST-inspired
-baseline has the best median, leading \sysname{} by $0.5\%$, $5.7\%$, and
-$5.2\%$ at $\rho=0.02$, $0.05$, and $0.1$, respectively. Thus temporal
-history is especially valuable when the current observation is extremely
-small, whereas \sysname{}'s mask-aware spatial representation becomes more
-effective once enough demands are visible. These complementary regimes are
-more informative than a claim of uniform dominance and identify extreme
-sparsity as the main remaining limitation.
-
-\subsection{Isolating the Sparse-Aware Allocator}
-\label{sec:allocator-isolation}
-
-The main table evaluates the complete deployed pipeline. To isolate the
-learned allocator, we compare \sysname{} with the same architecture frozen
-at random initialization and also evaluate both without post-processing.
-With the common neighbor-assisted refinement enabled, training wins 9 of 15
-seed-matched cells. Its median benefit is largest at $\rho=0.5$ ($13.0\%$)
-and $\rho=0.02$ ($9.8\%$), while the middle ratios are close or mixed. This
-shows that deployment-time refinement can compress differences between
-allocation priors and that the end-to-end result should not be attributed
-to either component alone.
-
-Without post-processing, training improves realized MLU in 13 of 15 paired
-cells (two-sided sign test $p=0.018$). The median gain reaches $28.1\%$ at
-$\rho=0.3$ and remains $16.5\%$ at $\rho=0.02$
-(\cref{fig:rq2}). The sparse-aware representation therefore learns a useful
-allocation prior even when the current observation contains only $2\%$ of
-demands; the deployed result additionally depends on how residual
-congestion is estimated.
-
-\begin{figure}[t]
-    \centering
-    \includegraphics[width=\linewidth]{figs/rq2.pdf}
-    \caption{Training gain without post-processing as a function of the
-    observation ratio. Markers show paired seeds and the line shows their
-    median.}
-    \label{fig:rq2}
-\end{figure}
-
-\subsection{Sensitivity to the Neighbor Estimate}
-\label{sec:neighbor-estimate}
-
-The optional refinement pass needs an estimated traffic matrix only to rank
-candidate paths by congestion. \Cref{tab:ladder} holds the allocator fixed
-at random initialization and varies this estimate at $\rho=0.3$. Zero
-filling reduces median MLU from $2.833$ to $2.295$ but remains blind to
-unmeasured load. The source-neighbor estimate reaches $1.740$, recovering
-most of the improvement obtained by the unavailable ground truth
-($1.599$). Thus the practical lesson is about estimation: source-local
-traffic correlation provides a substantially better congestion signal than
-zeros, without requiring complete matrix reconstruction.
+\end{table*}
 
 \begin{table}[t]
-    \caption{Sensitivity to the traffic estimate used by optional
-    post-processing: median MLU of the untrained control at $\rho=0.3$
-    (3 seeds). Ground truth is unavailable in deployment and is included
-    only as a reference.}
-    \label{tab:ladder}
+    \caption{Paired comparison of \sysname{} against each external control
+    over 25 $(\rho,\text{seed})$ pairs. A win means lower MLU.}
+    \label{tab:paired}
     \centering
     \footnotesize
     \setlength{\tabcolsep}{4pt}
-    \begin{tabular}{@{}llc@{}}
+    \begin{tabular}{@{}lccc@{}}
         \toprule
-        Setting & Traffic information & Median MLU \\
+        Control & Wins--losses & Ties & $p$ \\
         \midrule
-        none              & no post-processing          & 2.833 \\
-        \textsc{obs-zero} & observation, zeros elsewhere & 2.295 \\
-        \textsc{obs-nbr}  & observation, neighbor fill   & 1.740 \\
-        \textsc{oracle}   & ground truth                 & 1.599 \\
+        TEST-inspired & 11--14 & 0 & 0.6900 \\
+        zero-fill & 16--9 & 0 & 0.2295 \\
+        mean-interp & 16--9 & 0 & 0.2295 \\
+        nbr-fill & 15--10 & 0 & 0.4244 \\
+        untrained & 14--11 & 0 & 0.6900 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -315,14 +340,13 @@ constellation controller.
 \label{sec:takeaways}
 
 \begin{itemize}
-    \item \sysname{} improves median MLU over zero filling throughout the
-    tested range and is best among all evaluated allocators at
-    $\rho=0.3$ and $0.5$; the TEST-inspired baseline remains stronger at
-    lower observation ratios.
-    \item The mask-aware allocator learns a useful allocation prior in
-    isolation, winning 13 of 15 paired cells without post-processing, while
-    the deployed end-to-end result depends on the observation regime.
-    \item Source-neighbor estimation gives optional post-processing a much
-    better congestion signal than zeros and approaches the unavailable
-    ground-truth reference without making it the paper's central mechanism.
+    \item The complete five-seed distribution, not a column-wise median,
+    is required to interpret sparse-observation TE: none of \sysname{}'s
+    external pairwise comparisons is statistically significant.
+    \item Training and the three representation choices show mixed outcomes
+    in the available internal diagnostics; the architecture's structural
+    properties should not be read as a universal performance guarantee.
+    \item Source-neighbor estimation provides a substantially more useful
+    deployable congestion signal than zero filling in the $\rho=0.3$
+    diagnostic, while the oracle remains an unavailable reference.
 \end{itemize}

@@ -79,14 +79,16 @@ cross-attention so that missing measurements are represented explicitly and
 historical and spatial evidence are fused per demand; a source-neighbor
 estimate additionally supports optional deployment-time refinement without
 access to the ground-truth matrix. On a 1{,}584-satellite Starlink
-constellation, \sysname lowers median realized maximum link utilization
-relative to zero filling at every tested observation ratio from $2\%$ to
-$50\%$, with reductions of $1.3\%$ to $7.9\%$, and achieves the best median
-among all evaluated allocators at observation ratios $0.3$ and $0.5$.
-Results at lower ratios also expose the remaining challenge of extreme
-sparsity, where a TEST-inspired temporal baseline can be stronger.
-\sysname runs in under $0.4$~s per snapshot and transfers across
-constellation scales without architectural changes.
+constellation, a five-seed evaluation exposes substantial variation across
+both observation ratios and training initializations. \sysname{} records
+mixed paired outcomes against zero filling, interpolation, a neighbor-fill
+baseline, and a TEST-inspired temporal baseline; no overall pairwise
+comparison is statistically significant. The analysis therefore reports the
+complete seed-level distributions, identifies the limits of the present
+sparse-aware design, and separates the contribution of a source-neighbor
+estimate from the learned allocator. \sysname{} runs in under $0.4$~s per
+snapshot and transfers across constellation scales without architectural
+changes.
 \end{abstract}
 
 \begin{IEEEkeywords}

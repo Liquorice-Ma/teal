@@ -69,15 +69,16 @@ ground-truth traffic matrix. It is an implementation aid to the sparse-aware
 allocator rather than the organizing principle of the system.
 
 We evaluate \sysname{} on a 1{,}584-satellite Starlink Shell-1
-constellation over observation ratios from $2\%$ to $50\%$. Under an
-identical deployable refinement layer, \sysname{} lowers median realized
-MLU relative to zero filling at all five ratios by $1.3\%$ to $7.9\%$, and
-achieves the best median among all evaluated allocators at $\rho=0.3$ and
-$0.5$. A TEST-inspired temporal baseline is stronger at several lower
-ratios, revealing that extreme sparsity remains the hardest regime rather
-than supporting an artificial claim of universal dominance. \sysname{}
-also operates in under $0.4$~s per snapshot and transfers to a
-one-third-scale constellation without changing its architecture.
+constellation over observation ratios from $2\%$ to $50\%$. Five paired
+training seeds reveal that rankings vary with both observation ratio and
+initialization: \sysname{} has mixed outcomes against zero, mean, neighbor,
+and TEST-inspired alternatives, with no overall pairwise comparison reaching
+statistical significance. We therefore present the complete seed-level
+distributions and use the study to distinguish the learned allocator,
+optional neighbor-assisted refinement, and the regimes in which simple
+fill-based treatments remain competitive. \sysname{} also operates in under
+$0.4$~s per snapshot and transfers to a one-third-scale constellation
+without changing its architecture.
 
 In summary, this paper makes the following contributions:
 \begin{itemize}
@@ -91,8 +92,9 @@ In summary, this paper makes the following contributions:
     loads for optional deployment-time refinement using only information
     available to a sparsely measuring controller.
     \item We evaluate the design at Starlink scale against zero, mean,
-    neighbor, and TEST-inspired alternatives, identifying both its gains at
-    moderate observability and the remaining challenge at extreme sparsity.
+    neighbor, and TEST-inspired alternatives with seed-level distributions
+    and paired tests, identifying where the present design is competitive
+    and where its advantage is not statistically supported.
 \end{itemize}
 
 The remainder of this paper is organized as follows.

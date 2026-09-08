@@ -1,3 +1,4 @@
+\clearpage
 \section{Conclusion}
 \label{sec:conclusion}
 
@@ -10,22 +11,20 @@ evidence before predicting path split ratios. Shared parameters and demand
 pruning keep the architecture independent of the instantaneous demand-set
 size.
 
-On a 1{,}584-satellite Starlink constellation, \sysname{} reduces median
-realized MLU relative to zero filling at all observation ratios from $2\%$
-to $50\%$, with reductions of $1.3\%$ to $7.9\%$. It achieves the best
-median among all evaluated allocators at observation ratios $0.3$ and
-$0.5$, while a TEST-inspired temporal baseline performs better at several
-lower ratios. This boundary is itself informative: mask-aware spatial
-reasoning benefits from a minimally informative current observation,
-whereas extreme sparsity increases the value of temporal history. Without
-post-processing, the trained allocator wins 13 of 15 seed-matched
-comparisons against its untrained counterpart, confirming that learning
-contributes an allocation prior rather than merely inheriting gains from
-post-processing.
+On a 1{,}584-satellite Starlink constellation, five paired training seeds
+show that MLU rankings vary with both the observation ratio and
+initialization. \sysname{} records more paired wins than zero-fill,
+mean-interp, and nbr-fill controls, but none of its external pairwise
+comparisons is statistically significant. The component diagnostic is also
+mixed at the two sparsest ratios. These negative results matter: they show
+that the structural plausibility of a sparse-aware representation does not
+by itself establish a uniform end-to-end MLU gain, and motivate reporting
+all seed-level outcomes rather than only a column-wise summary statistic.
 
 For deployment, a source-neighbor estimate can provide optional
 post-processing with a useful congestion signal without access to the
-complete traffic matrix. This is a supporting mechanism, not a substitute
-for the sparse-aware allocator. Future work should improve the extreme
-sparsity regime through adaptive measurement scheduling, longer-horizon
-temporal models, and objectives that explicitly control worst-case MLU.
+complete traffic matrix. It is a supporting mechanism, not a substitute for
+the sparse-aware allocator. Future work should improve robustness across
+initializations and observation masks through adaptive measurement
+scheduling, observation-aware model selection, and objectives that
+explicitly control worst-case MLU.

@@ -1,0 +1,6 @@
+baseline,wins,losses,ties,p_two_sided
+test-style,11,14,0,0.6900
+zero-fill,16,9,0,0.2295
+mean-interp,16,9,0,0.2295
+nbr-fill,15,10,0,0.4244
+untrained,14,11,0,0.6900
