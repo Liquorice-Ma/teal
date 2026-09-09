@@ -73,22 +73,35 @@ Existing learned TE systems achieve low online latency but assume a complete
 traffic matrix, whereas telemetry and onboard-resource constraints allow a
 constellation controller to meter only a fraction of demands at each epoch.
 This paper presents \sysname, a sparse-aware TE system that allocates all
-demands directly from incomplete observations. \sysname combines learnable
-mask embeddings, asymmetric graph gating, temporal encoding, and
-cross-attention so that missing measurements are represented explicitly and
-historical and spatial evidence are fused per demand; a source-neighbor
-estimate additionally supports optional deployment-time refinement without
-access to the ground-truth matrix. On a 1{,}584-satellite Starlink
-constellation, a five-seed evaluation exposes substantial variation across
-both observation ratios and training initializations. \sysname{} records
-mixed paired outcomes against zero filling, interpolation, a neighbor-fill
-baseline, and a TEST-inspired temporal baseline; no overall pairwise
-comparison is statistically significant. The analysis therefore reports the
-complete seed-level distributions, identifies the limits of the present
-sparse-aware design, and separates the contribution of a source-neighbor
-estimate from the learned allocator. \sysname{} runs in under $0.4$~s per
-snapshot and transfers across constellation scales without architectural
-changes.
+demands directly from incomplete observations, and rests on three ideas.
+First, each unmeasured demand is represented by a learnable mask embedding,
+so the model input separates ``not measured'' from ``no traffic'' instead of
+fabricating a volume. Second, message passing over the path--link graph is
+gated asymmetrically: unmeasured demands read link states but write nothing
+into them, which provably keeps surrogate values out of the link
+representation and out of every measured demand's allocation. Third, a
+temporal encoder over recent sparse snapshots is fused with the spatial
+representation by per-demand cross-attention, so history governs which
+spatial evidence to trust where the current entry is missing. A
+source-neighbor estimate additionally supplies the congestion signal for
+optional deployment-time refinement without access to the ground-truth
+matrix. On a 1{,}584-satellite Starlink constellation observed at ratios
+from $2\%$ to $50\%$, \sysname{} decides in under $0.4$~s per snapshot,
+realizes a maximum link utilization (MLU) of $1.64$--$1.89$, within
+$1.19$--$1.37\times$ of the path-restricted linear-programming optimum, and
+transfers to a one-third-scale constellation unchanged. Measured against
+impute-then-optimize pipelines and a temporal baseline on zero-filled
+input, which together test whether reconstructing the matrix or history
+alone can substitute for explicit mask awareness, \sysname{} attains the
+lower MLU in 15 to 16 of 25 matched trials, yet no pairwise comparison is
+significant under a two-sided sign test. Ablations attribute a $6.7\%$ MLU
+reduction at a $50\%$ observation ratio to end-to-end training and show the
+source-neighbor estimate lowering median MLU from $2.30$ to $1.74$ against
+zero filling, while the representation components trade places at the
+sparsest ratios. We therefore report complete distributions over training
+initializations, whose spread suffices to reverse rankings drawn from any
+single aggregate score, and delimit where sparse-aware learning currently
+helps.
 \end{abstract}
 
 \begin{IEEEkeywords}

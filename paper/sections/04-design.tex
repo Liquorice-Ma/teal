@@ -7,14 +7,14 @@
 \label{sec:overview}
 
 \sysname{} solves the sparse-observation TE problem of
-\cref{sec:sparse-te} in four stages, as illustrated in
+\cref{sec:sparse-te} in four stages, numbered \textbf{1}--\textbf{4} in
 \cref{fig:arch}. Given the sparse observation $(O^t, M)$ and history $H^t$,
-(i) unmeasured demands are represented by a learnable mask embedding
-(\cref{sec:mask-embed}); (ii) a mask-aware gated GNN propagates information
+(1)~unmeasured demands are represented by a learnable mask embedding
+(\cref{sec:mask-embed}); (2)~a mask-aware gated GNN propagates information
 between candidate paths and links without letting placeholders contaminate
-link states (\cref{sec:gating}); (iii) a Transformer encodes the observation
+link states (\cref{sec:gating}); (3)~a Transformer encodes the observation
 history and fuses it with spatial embeddings via per-demand cross-attention
-(\cref{sec:fusion}); and (iv) a shared policy head outputs split ratios per
+(\cref{sec:fusion}); and (4)~a shared policy head outputs split ratios per
 demand. An optional neighbor-assisted pass refines residual overloads using
 only an observation-derived estimate (\cref{sec:training}). All learnable
 weights are
@@ -50,12 +50,16 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
     \centering
     % 位图版式（figures/edit_architecture_png.py 在草稿基础上做像素级修订）
     \includegraphics[width=\linewidth]{figures/architecture-v1-edited.png}
-    \caption{\sysname{} overview: a sparse observation is embedded with
-    mask awareness, processed by a gated flow-centric GNN in parallel with a
-    temporal encoder, fused via per-demand cross-attention, and mapped to
-    split ratios. An optional post-processing pass estimates path congestion
-    from source-neighbor traffic and refines residual overloads without
-    accessing unmeasured demands.}
+    \caption{\sysname{} overview. The numbers \textbf{1}--\textbf{4} in the
+    figure mark the four stages of \cref{sec:overview}: \textbf{1}~a sparse
+    observation is embedded with mask awareness; \textbf{2}~a gated
+    flow-centric GNN propagates information without letting placeholders
+    contaminate link states; \textbf{3}~a temporal encoder and per-demand
+    cross-attention fuse historical and spatial evidence; and \textbf{4}~a
+    shared policy head maps the fused features to split ratios. An optional
+    post-processing pass estimates path congestion from source-neighbor
+    traffic and refines residual overloads without accessing unmeasured
+    demands.}
     \label{fig:arch}
 \end{figure}
 

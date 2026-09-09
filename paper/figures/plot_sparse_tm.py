@@ -40,7 +40,7 @@ cmap.set_bad(color='white')             # zero traffic in white
 for ax, gray_rows, title in [
         (axes[0], None, '(a) Ground-truth traffic matrix'),
         (axes[1], ~observed_nodes,
-         '(b) Sparse observation ($\\rho=0.5$, node-level)')]:
+         '(b) Node-level sparse observation ($\\rho=0.5$)')]:
     # data layer: only positive demands are colored, zeros are white
     im = ax.imshow(np.ma.masked_less_equal(tm, 0), cmap=cmap, norm=norm,
                    interpolation='nearest')
@@ -49,10 +49,12 @@ for ax, gray_rows, title in [
         overlay = np.zeros((CROP, CROP, 4))
         overlay[gray_rows, :] = (0.72, 0.72, 0.72, 1.0)
         ax.imshow(overlay, interpolation='nearest')
-    ax.set_title(title, fontsize=9)
     ax.set_xlabel('destination satellite', fontsize=8)
     ax.set_ylabel('source satellite', fontsize=8)
     ax.tick_params(labelsize=7)
+    # panel label (a)/(b) placed *below* the panel, under the x-axis label
+    ax.text(0.5, -0.34, title, transform=ax.transAxes,
+            ha='center', va='top', fontsize=9)
 
 cbar = fig.colorbar(im, ax=axes, shrink=0.85, pad=0.02)
 cbar.set_label('demand volume (log scale)', fontsize=8)

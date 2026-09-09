@@ -8,7 +8,7 @@
 
 We model the constellation at control epoch $t$ as a directed graph
 $G^t = (V, E^t)$, where $V$ is the set of $N$ satellites and $E^t$ the set of
-inter-satellite links (ISLs), each link $e$ with capacity $c_e$. Time is
+ISLs, each link $e$ with capacity $c_e$. Time is
 slotted into control epochs; within an epoch the topology snapshot is fixed,
 while across epochs both $E^t$ and the traffic change as satellites move.
 
@@ -54,8 +54,7 @@ $r_{i,k} \ge 0$ and $\sum_k r_{i,k} = 1$, so every demand is fully served. Main 
 With the complete demand matrix available, TE is the classic path-based
 allocation problem. We focus on load balancing, the standard objective in
 satellite TE, where hot ISLs over populated regions dictate quality of
-service~\cite{sate,hu2022,wei2024}. It minimizes maximum link utilization
-(MLU):
+service~\cite{sate,hu2022,wei2024}. It minimizes the MLU:
 \begin{align}
     \min_{\{r_{i,k}\}} \quad & \theta \label{eq:mlu} \\
     \text{s.t.} \quad
@@ -99,10 +98,15 @@ $H^t = (O^{t-L+1}, \ldots, O^t)$.
 \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{figures/sparse-tm.pdf}
-    \caption{A ground-truth traffic matrix from the Starlink $22{\times}72$
-    trace (150 busiest satellites shown) and its node-level sparse
-    observation: white cells carry no traffic, gray rows are unmeasured
-    source satellites, and colored cells are observed demands.}
+    \caption{Sparse observation is structured, not random. \textbf{(a)} A
+    ground-truth traffic matrix from the Starlink $22{\times}72$ trace (150
+    busiest satellites shown); traffic concentrates on a few
+    source-destination pairs. \textbf{(b)} Its node-level sparse observation:
+    white cells carry no traffic, gray rows are unmeasured source satellites
+    whose entire demand row is hidden, and colored cells are observed demands.
+    Because metering is per satellite, one unmeasured node removes a whole row
+    at once, so the controller must allocate demands it has never seen rather
+    than fill in scattered missing entries.}
     \label{fig:sparse-tm}
 \end{figure}
 
@@ -171,7 +175,8 @@ is non-differentiable through the capacity-constrained network and the true
 $D$ is available only as a training-time signal, we
 optimize \cref{eq:rl-obj} with multi-agent reinforcement learning, in
 which each demand acts as an agent sharing $\theta$ and receives a
-COMA-style marginal-contribution reward. This paradigm makes the observation
+counterfactual multi-agent (COMA)~\cite{foerster2018} style
+marginal-contribution reward. This paradigm makes the observation
 model in \cref{eq:obs} a property of the \emph{input}, and the optimization
 target in \cref{eq:sparse-mlu} a property of the \emph{training signal},
 cleanly separating what the policy can see from what it is optimized for.

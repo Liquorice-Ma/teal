@@ -7,27 +7,30 @@
 
 Traffic engineering has long been formulated as a constrained optimization
 problem~\cite{fortz2000,wang2006} solved by linear programming (LP), whose
-runtime scales poorly with network size. SMORE~\cite{smore} decouples
-robust oblivious path selection
-from online rate adaptation, while NCFlow~\cite{ncflow} and POP~\cite{pop}
-accelerate LP by problem decomposition, trading allocation quality for
-speed. A recent line of work replaces online solvers with learned
-models~\cite{valadarsky2017}:
-DOTE~\cite{dote} directly maps historical traffic matrices to split ratios
-with stochastic optimization; Teal~\cite{teal} combines a flow-centric GNN,
-multi-agent RL, and ADMM fine-tuning to achieve near-optimal allocations
-with orders-of-magnitude speedups; FIGRET~\cite{figret} enhances robustness
-against traffic uncertainty at per-flow granularity. To survive topology
-changes without retraining, HARP~\cite{harp} enforces invariances to node
-permutation and tunnel reordering, transferring across topologies unseen in
-training; Aether~\cite{aether2025} pursues the same generality with elastic
-multi-agent graph transformers, and path-based GNNs have been trained for
-robust distributed TE under link failures~\cite{ye2025}. More recently,
-large language models have been explored as
-general-purpose traffic planners~\cite{netllm}. However, all of these
-systems assume the \emph{complete} traffic matrix is available at decision
-time, an assumption that rarely holds in large-scale satellite networks,
-where network-wide measurement is prohibitively expensive.
+runtime scales poorly with network size. Kumar \emph{et al.} proposed
+SMORE~\cite{smore}, which decouples robust oblivious path selection
+from online rate adaptation, while Abuzaid \emph{et al.}~\cite{ncflow} and
+Narayanan \emph{et al.}~\cite{pop} accelerate LP by problem decomposition,
+trading allocation quality for speed. A recent line of work replaces online
+solvers with learned models~\cite{valadarsky2017}: Perry \emph{et al.}
+proposed DOTE~\cite{dote}, which directly maps historical traffic matrices to
+split ratios with stochastic optimization; Xu \emph{et al.} proposed
+Teal~\cite{teal}, combining a flow-centric graph neural network (GNN),
+multi-agent reinforcement learning (RL), and alternating direction method of
+multipliers (ADMM) fine-tuning to achieve near-optimal allocations with
+orders-of-magnitude speedups; and Liu \emph{et al.} proposed
+FIGRET~\cite{figret}, which enhances robustness against traffic uncertainty at
+per-flow granularity. To survive topology changes without retraining, AlQiam
+\emph{et al.} proposed HARP~\cite{harp}, enforcing invariances to node
+permutation and tunnel reordering so that it transfers across topologies unseen
+in training; Fan \emph{et al.} proposed Aether~\cite{aether2025}, pursuing the
+same generality with elastic multi-agent graph transformers, and Ye
+\emph{et al.}~\cite{ye2025} trained path-based GNNs for robust distributed TE
+under link failures. More recently, Wu \emph{et al.}~\cite{netllm} explored
+large language models as general-purpose traffic planners. However, all of
+these systems assume the \emph{complete} traffic matrix is available at
+decision time, an assumption that rarely holds in large-scale satellite
+networks, where network-wide measurement is prohibitively expensive.
 
 \subsection{TE and Routing for Satellite Networks}
 
@@ -36,19 +39,21 @@ every few tens of milliseconds as satellites move, and control decisions
 must be produced within stringent latency
 budgets~\cite{handley2018,bhattacherjee2019,kassing2020}. Classical
 approaches
-absorb mobility through topology abstractions: the virtual node model
-binds logical nodes to earth-fixed footprints so that upper-layer routing
-observes a quasi-static grid~\cite{vn2013}. Optimization-based satellite
-TE has explored segment routing~\cite{hu2022}, distributed clustering
-that optimizes elephant flows separately~\cite{wei2024}, and supervised
-learning for distributed split-ratio prediction~\cite{flexsate2024}.
-SaTE~\cite{sate} is the
+absorb mobility through topology abstractions; the virtual node model of Lu
+\emph{et al.}~\cite{vn2013} binds logical nodes to earth-fixed footprints so
+that upper-layer routing observes a quasi-static grid. Optimization-based
+satellite TE has explored segment routing~\cite{hu2022}, distributed
+clustering that optimizes elephant flows separately~\cite{wei2024}, and
+supervised learning for distributed split-ratio prediction~\cite{flexsate2024}.
+Wu \emph{et al.} proposed SaTE~\cite{sate}, the
 state-of-the-art learning-based TE for satellite constellations: it
 formulates a heterogeneous graph over satellites, demands, paths, and links,
 prunes zero-traffic relations to make training tractable on a single GPU,
-and selects representative topologies via Graph2Vec and DPP sampling so that
+and selects representative topologies via Graph2Vec and determinantal point
+process (DPP) sampling so that
 one trained model generalizes across topology snapshots with millisecond
-inference. In parallel, FNC~\cite{fnc,fnc-infocom} targets dynamic traffic
+inference. In parallel, Yang \emph{et al.} proposed FNC~\cite{fnc,fnc-infocom},
+which targets dynamic traffic
 allocation for earth-observation constellations, replacing RL with
 end-to-end imitation learning and substituting iterative constraint solvers
 with normalization-based feasibility layers. Notably, FNC's imitation
@@ -56,7 +61,9 @@ learning requires expert demonstrations, and the TE expert is an optimal
 allocation whose computation needs the complete demand matrix of each
 episode, a paradigm that fundamentally requires complete post-hoc
 observability, which is unavailable under sparse measurement. Both SaTE and FNC, like their WAN counterparts,
-assume the traffic matrix is fully observable at decision time.
+assume the traffic matrix is fully observable at decision time. Unlike SaTE
+and FNC, \sysname{} performs TE from sparse observations, down to a $2\%$
+observation ratio (\cref{tab:related}).
 
 \subsection{TE with Incomplete Traffic Observations}
 
@@ -64,23 +71,31 @@ Network-wide traffic measurement is expensive: collecting a complete
 traffic matrix requires instrumenting all ingress nodes at fine time
 granularity, which is particularly onerous on resource-constrained
 satellite platforms. A classical workaround is a two-stage pipeline:
-first estimate or complete the traffic matrix via network
-tomography~\cite{vardi1996,zhang2003}, matrix completion, or compressive
-sensing~\cite{zhang2009}, then optimize routing on the estimate. However,
-reconstruction errors propagate to and degrade the downstream allocation.
-TEST~\cite{test} is, to our knowledge, the first end-to-end approach that
-learns routing policies directly from sparsely measured traffic matrices,
-integrating a Transformer over historical sparse sequences with a GCN over
-the topology; it fills unobserved entries with zeros, compensates with
-synthesized training augmentation, and targets terrestrial networks with
-static topologies. In the graph learning literature, message passing under
-missing node features has been addressed via teacher-student
-distillation~\cite{t2gnn}, but such techniques have not been applied to
-network TE. No prior work, to our knowledge, performs TE from sparse
-traffic observations in satellite networks, where the difficulty is
-compounded by time-varying topologies and drifting demand sets.
-
-\subsection{Positioning}
+first estimate or complete the traffic matrix via network tomography
+(Vardi~\cite{vardi1996}; Zhang \emph{et al.}~\cite{zhang2003}), matrix
+completion, or compressive sensing~\cite{zhang2009}, then optimize routing on
+the estimate. However, reconstruction errors propagate to and degrade the
+downstream allocation, since a single reconstructed matrix is handed to a
+separate optimizer. Guo \emph{et al.} proposed TEST~\cite{test}, which, to
+our knowledge, is the first \emph{end-to-end} approach to learn routing
+policies directly from sparsely measured traffic matrices rather than first
+reconstructing them; it integrates a Transformer over historical sparse
+sequences with a graph convolutional network (GCN) over the topology, fills
+unobserved entries with zeros, compensates with synthesized training
+augmentation, and targets terrestrial networks with static topologies. In the
+graph learning literature, Huo \emph{et al.}~\cite{t2gnn} addressed message
+passing under missing node features via teacher-student distillation, but such
+techniques have not been applied to network TE. No prior work, to our
+knowledge, performs TE from sparse traffic observations in satellite networks,
+where the difficulty is compounded by time-varying topologies and drifting
+demand sets. Unlike TEST, which fills unobserved entries with zeros and
+targets static terrestrial networks, \sysname{} replaces missing entries with
+learnable mask embeddings, gates their message passing, and handles LEO
+dynamics---time-varying topologies and drifting demand-pair sets---via demand
+pruning with size-invariant weights, enabling train-once, zero-retraining
+deployment; it further uses a source-neighbor estimate for optional
+congestion-aware refinement without consulting the unobserved ground-truth
+matrix (\cref{tab:related}).
 
 \begin{table}[t]
     \caption{Comparison with the related works.}
@@ -103,15 +118,3 @@ compounded by time-varying topologies and drifting demand sets.
         \bottomrule
     \end{tabular}
 \end{table}
-
-Our work sits at the intersection of these three lines
-(\cref{tab:related}). Unlike SaTE and FNC, which assume fully observable
-demands, \sysname{} performs TE from sparse observations, down to a $2\%$
-observation ratio. Unlike TEST, which fills unobserved entries with zeros
-and targets static terrestrial networks, \sysname{} replaces missing
-entries with learnable mask embeddings, gates their message passing, and
-handles LEO dynamics, namely time-varying topologies and drifting
-demand-pair sets, via demand pruning with size-invariant model weights,
-enabling train-once, zero-retraining deployment. Finally, \sysname{} uses a
-source-neighbor estimate to support optional congestion-aware refinement
-without consulting the unobserved ground-truth traffic matrix.
