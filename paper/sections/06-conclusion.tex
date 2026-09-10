@@ -10,17 +10,17 @@ evidence before predicting path split ratios. Shared parameters and demand
 pruning keep the architecture independent of the instantaneous demand-set
 size.
 
-On a 1{,}584-satellite Starlink constellation, treating the training
-initialization as an experimental factor rather than noise, we find that MLU
-rankings vary with both the observation ratio and the initialization.
+Repeated evaluations on a 1{,}584-satellite Starlink constellation show
+that MLU rankings vary with both the observation ratio and model
+initialization.
 \sysname{} attains the lower MLU on more matched trials than the zero-fill,
 mean-interp, and nbr-fill controls, yet none of its external pairwise
 comparisons is statistically significant. The component diagnostic is also
 mixed at the two sparsest ratios. These negative results matter: they show
 that the structural plausibility of a sparse-aware representation does not
-by itself establish a uniform end-to-end MLU gain, and motivate reporting
-the full distribution over training initializations rather than only a
-column-wise summary statistic.
+by itself establish a uniform end-to-end MLU gain, and that comparisons
+must account for variation across experimental repeats rather than rely on
+a single summary statistic.
 
 For deployment, a source-neighbor estimate can provide optional
 post-processing with a useful congestion signal without access to the

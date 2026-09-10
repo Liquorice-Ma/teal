@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
-"""Generate seed-level figures and summaries for the SpaTE evaluation.
+"""根据已有数据生成 SpaTE 的重复实验散点图和统计摘要。
 
-The main comparison uses the aligned five-seed deployable protocol in
-``run/overall_valrepair_5seed.csv``.  One row is one training seed averaged
-across the fixed 11-snapshot test interval; seed markers are therefore shown
-individually, while paired sign tests operate on seeds rather than snapshots.
-The component and neighbor-estimate panels use their explicitly labelled
-three-seed, no-post-processing diagnostic datasets.
+主对比读取 ``run/overall_valrepair_5seed.csv``，每行是一次独立重复在
+固定 11 个测试快照上的平均值。图中展示各次重复，配对检验仍以相同
+观测率、相同随机种子的记录配对，而不是把快照视为独立重复。
+组件消融不使用后处理；邻居估计诊断的后处理设置由各自数据源确定。
 """
 
 import csv
@@ -124,7 +122,7 @@ def main_distribution(cells):
         ax.set_xticks(range(len(METHODS)))
         ax.set_xticklabels(["SpaTE", "TEST", "zero", "mean", "nbr", "untr."], rotation=55, ha="right")
         ax.grid(axis="y")
-    axes[0].set_ylabel("MLU per training seed\n(11-snapshot test average)")
+    axes[0].set_ylabel("MLU per repeat\n(11-snapshot test average)")
     # two-line ylabel: needs a wider left margin than the single-line panels
     finish(fig, "overall_distribution.pdf", left=0.105, bottom=0.34)
 
@@ -134,10 +132,10 @@ def internal_training(cells):
     for ax, rho in zip(axes, RHOS):
         ours = [cells["ours", rho][seed] for seed in range(5)]
         untrained = [cells["untrained", rho][seed] for seed in range(5)]
-        for seed, (trained, random) in enumerate(zip(ours, untrained)):
-            ax.plot([0, 1], [random, trained], color="0.55", lw=0.75, zorder=1)
-            ax.scatter(0, random, color=COLORS["untrained"], s=16, zorder=2)
-            ax.scatter(1, trained, color=COLORS["ours"], s=16, zorder=3)
+        # 横向错开重复点以避免重叠；不画配对连线，统计配对保持不变。
+        ax.scatter(JITTER, untrained, color=COLORS["untrained"], s=16, zorder=3)
+        ax.scatter([1 + offset for offset in JITTER], ours,
+                   color=COLORS["ours"], s=16, zorder=3)
         ax.hlines(mean(untrained), -0.14, 0.14, color="black", lw=1.1)
         ax.hlines(mean(ours), 0.86, 1.14, color="black", lw=1.1)
         ax.set_title(rf"$\rho={rho:g}$")
@@ -169,7 +167,7 @@ def component_lowrho():
         ax.set_xticks(range(4))
         ax.set_xticklabels(["SpaTE", "no\nembed", "no\ngate", "no\ntemporal"])
         ax.grid(axis="y")
-    axes[0].set_ylabel("MLU per training seed")
+    axes[0].set_ylabel("MLU per repeat")
     finish(fig, "component_lowrho.pdf", left=0.10, bottom=0.28)
 
 
@@ -206,7 +204,7 @@ def main():
     internal_training(cells)
     component_lowrho()
     neighbor_ladder()
-    print("wrote seed-level figures and CSV summaries")
+    print("已生成重复实验图表与 CSV 摘要")
 
 
 if __name__ == "__main__":

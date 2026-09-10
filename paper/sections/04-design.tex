@@ -10,7 +10,7 @@
 \cref{sec:sparse-te} in four stages, numbered \textbf{1}--\textbf{4} in
 \cref{fig:arch}. Given the sparse observation $(O^t, M)$ and history $H^t$,
 (1)~unmeasured demands are represented by a learnable mask embedding
-(\cref{sec:mask-embed}); (2)~a mask-aware gated GNN propagates information
+(\cref{sec:mask-embed}); (2)~a mask-gated FlowGNN propagates information
 between candidate paths and links without letting placeholders contaminate
 link states (\cref{sec:gating}); (3)~a Transformer encodes the observation
 history and fuses it with spatial embeddings via per-demand cross-attention
@@ -20,7 +20,10 @@ only an observation-derived estimate (\cref{sec:training}). All learnable
 weights are
 shared across demands and independent of the demand-set size, which
 \cref{sec:scaling} exploits for zero-retraining deployment under
-constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
+constellation dynamics. The path--link backbone and shared-policy training
+use Teal~\cite{teal} as their implementation basis; mask-aware inputs,
+asymmetric propagation, and temporal fusion adapt the allocator to sparse
+satellite measurements. \Cref{alg:infer} summarizes one inference epoch.
 
 \begin{algorithm}[t]
 \caption{\sysname{} inference at control epoch $t$}
@@ -51,15 +54,12 @@ constellation dynamics. \Cref{alg:infer} summarizes one inference epoch.
     % 位图版式（figures/edit_architecture_png.py 在草稿基础上做像素级修订）
     \includegraphics[width=\linewidth]{figures/architecture-v1-edited.png}
     \caption{\sysname{} overview. The numbers \textbf{1}--\textbf{4} in the
-    figure mark the four stages of \cref{sec:overview}: \textbf{1}~a sparse
-    observation is embedded with mask awareness; \textbf{2}~a gated
-    flow-centric GNN propagates information without letting placeholders
-    contaminate link states; \textbf{3}~a temporal encoder and per-demand
-    cross-attention fuse historical and spatial evidence; and \textbf{4}~a
-    shared policy head maps the fused features to split ratios. An optional
-    post-processing pass estimates path congestion from source-neighbor
-    traffic and refines residual overloads without accessing unmeasured
-    demands.}
+    figure mark the four stages of \cref{sec:overview}: \textbf{1}~mask-aware
+    demand embedding; \textbf{2}~mask-gated FlowGNN (\cref{sec:gating});
+    \textbf{3}~temporal encoding and per-demand cross-attention; and
+    \textbf{4}~split-ratio prediction. The optional neighbor-assisted
+    refinement uses observation-derived traffic estimates to rebalance paths;
+    it is not ADMM or a projection onto link-capacity constraints.}
     \label{fig:arch}
 \end{figure}
 
@@ -85,21 +85,26 @@ jointly with the policy under the TE objective in \cref{eq:rl-obj} rather than
 a reconstruction loss, so $\phi$ converges to values that maximize
 allocation quality, not reconstruction accuracy.
 
-\subsection{Gated Message Passing}
+\subsection{Mask-Gated FlowGNN}
 \label{sec:gating}
 
-\sysname{} inherits Teal's flow-centric graph~\cite{teal}: candidate paths
-and physical links form a bipartite structure where a PathNode connects to
-the EdgeNodes it traverses, and message passing alternates between them
-with GCN-style normalized aggregation~\cite{kipf2017}.
-Under sparse observation, however, symmetric message passing is harmful:
-placeholder values on unmeasured PathNodes would propagate into EdgeNode
-embeddings and corrupt the network-wide estimate of link utilization, a
-phenomenon consistent with the feature-structure interference observed in
-incomplete graphs~\cite{t2gnn}. We therefore gate the propagation
-\emph{asymmetrically}. Let $A$ be the normalized bipartite adjacency; we
-zero out entries that carry path-to-edge messages from unmeasured paths
-while keeping all edge-to-path entries:
+The spatial encoder, labelled Gated FlowGNN in \cref{fig:arch}, represents
+competition for ISL capacity through a path--link bipartite graph. Each
+candidate path is a PathNode connected to the EdgeNodes for the ISLs it
+traverses. This representation lets demands on different satellite pairs
+exchange information through shared links along multi-hop routes.
+Each layer combines GCN-style normalized graph aggregation~\cite{kipf2017}
+with a shared transformation over the candidate paths of each demand; skip
+connections retain the original inputs. After $\Lambda$ layers, the
+PathNode features form the spatial embeddings $H_S$ used in
+\cref{sec:fusion}.
+
+The sparse-observation modification is a mask-controlled direction of
+propagation. Without it, placeholders for unmeasured satellite demands enter
+shared link embeddings and can affect other demands using the same ISLs,
+consistent with feature--structure interference in incomplete graphs~\cite{t2gnn}.
+We gate path-to-link messages while preserving the reverse direction.
+Let $A$ be the normalized bipartite adjacency; the mask-gated operator is
 \begin{equation}
     \tilde{A}[e, p] = M_p \cdot A[e, p], \qquad
     \tilde{A}[p, e] = A[p, e],
@@ -108,15 +113,17 @@ while keeping all edge-to-path entries:
 where $M_p$ is the demand-level mask lifted to path $p$. Unmeasured demands
 thus remain \emph{listeners}: they sense link states, which are shaped by
 measured traffic, but inject no fabricated volume into them. The gate is
-a fixed binary function of the mask with no extra parameters, adding zero
-inference overhead. The asymmetric gate yields a formal isolation property:
+a fixed binary function of the mask with no extra learnable parameters;
+its weights are prepared when the graph is built. The asymmetric gate
+yields a formal isolation property:
 
 \begin{proposition}[Placeholder isolation]
 \label{prop:isolation}
 Under the gated propagation in \cref{eq:gate}, the embeddings of all
 EdgeNodes and of all PathNodes belonging to measured demands are
-independent of the mask embedding $\phi$; $\phi$ influences only the
-allocations of unmeasured demands.
+independent of the mask embedding $\phi$; for fixed network weights,
+$\phi$ influences only the policy-head outputs of unmeasured demands,
+before optional refinement.
 \end{proposition}
 
 \begin{IEEEproof}
@@ -138,10 +145,10 @@ $\phi$-free branch, and only unmeasured PathNodes, and consequently
 their own split ratios, depend on $\phi$.
 \end{IEEEproof}
 
-In other words, learning a poor prior $\phi$ can at worst misallocate the
-unmeasured demands themselves, but can never corrupt the allocations of
-measured traffic, a robustness guarantee that zero-filling with
-ungated propagation does not provide.
+This property limits direct propagation of placeholder errors through the
+learned allocator; it does not guarantee lower MLU. It also does not extend
+to the optional refinement, where all demands interact through estimated
+link loads.
 
 \subsection{Temporal-Spatial Fusion}
 \label{sec:fusion}
@@ -182,8 +189,9 @@ demands and tens of millions of path variables, which is infeasible for
 online control. Satellite traffic, however, is geographically concentrated: only
 0.25\% of pairs ever carry traffic in our dataset. \sysname{} instantiates
 PathNodes only for the demand-pair union observed in historical traffic
-matrices, shrinking the graph by ${\sim}400\times$ with no loss of served
-traffic, in the same spirit as SaTE's traffic pruning~\cite{sate}.
+matrices, shrinking the graph by ${\sim}400\times$ while retaining all
+nonzero demands in that historical union, in the same spirit as SaTE's
+traffic pruning~\cite{sate}.
 
 \subsubsection{Zero-Retraining under Drift}
 Pruned demand sets are not static: as satellites move, the active pair set
@@ -223,13 +231,13 @@ embeddings, and hence the outputs, are permuted identically.
 \subsection{Training and Neighbor-Assisted Refinement}
 \label{sec:training}
 
-\sysname{} trains with the multi-agent RL scheme of Teal~\cite{teal}: each
-demand is an agent sharing the policy network. The policy outputs a
-Gaussian mean per path, and actions are sampled during training. To assign
-credit, each agent receives a COMA-style~\cite{foerster2018}
-counterfactual reward that
-estimates its marginal contribution to the global
-objective in \cref{eq:rl-obj}: for demand $i$,
+The mask embedding, spatial encoder, temporal encoder, and fusion layers
+are trained jointly against the realized MLU objective in \cref{eq:rl-obj}.
+Each demand acts as an agent sharing the policy network. The policy outputs
+a Gaussian mean per path, and actions are sampled during training. A
+COMA-style counterfactual reward~\cite{foerster2018} assigns credit to each
+demand by estimating its marginal contribution to the global objective:
+for demand $i$,
 \begin{equation}
     A_i = \mathbb{E}_{\tilde{r}_i \sim \pi'}
         \bigl[ R(r_{-i}, r_i) - R(r_{-i}, \tilde{r}_i) \bigr],
@@ -238,24 +246,23 @@ objective in \cref{eq:rl-obj}: for demand $i$,
 where $r_{-i}$ denotes the allocations of all other demands and
 $\tilde{r}_i$ is a counterfactual action resampled from a reference
 distribution $\pi'$; the policy gradient weights each agent's log
-probability by $A_i$. \Cref{alg:train} summarizes offline training. Two
-points deserve emphasis. First, the reward is computed against
-\emph{ground-truth} demands during offline training (sparse observation
-constrains the policy input, never the training signal), which is exactly
-what a simulator or historical trace provides. Second, we deliberately
-retain reward-driven RL rather than imitation learning~\cite{fnc}:
-imitation learning requires expert allocations solved from \emph{fully
-realized} demands of each episode, a supervision signal that is unavailable
-when even post-hoc observation is sparse; RL needs only the reward, which
-the network itself provides.
+probability by $A_i$. \Cref{alg:train} summarizes offline training. The
+policy receives only sparse inputs, whereas rewards are evaluated using
+complete simulated or historical demands. Unlike imitation
+learning~\cite{fnc}, this procedure does not require optimal allocation
+labels for each training snapshot. It does, however, require access to
+those complete demands during offline training; the sparse-observation
+restriction applies to policy inputs and deployment-time decisions.
 
 \textbf{Neighbor-assisted refinement.} The policy head uses a softmax,
 so its split ratios satisfy flow conservation in \cref{eq:conserve} by
 construction. A short post-processing pass may nevertheless improve MLU by
 moving a fraction of each demand from its most congested candidate path to
-its least congested one. Each pass preserves the per-demand total and hence
-cannot reduce MLU by dropping traffic. Our deployed setting uses two rounds,
-each containing ten lightweight sweeps.
+its least congested one. This is a conservation-preserving rebalancing
+heuristic, not ADMM or a capacity-feasibility projection. Each pass preserves
+the per-demand total but does not guarantee that every link's load falls
+below capacity. Our deployed setting uses two rounds, each containing ten
+lightweight sweeps.
 
 The key difficulty under sparse observation is not the rebalancing rule but
 how to estimate the link loads used to rank paths. A controller that meters

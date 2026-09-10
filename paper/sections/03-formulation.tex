@@ -22,7 +22,10 @@ $P_i = \{p_{i,1}, \ldots, p_{i,\kappa}\}$ ($\kappa = 4$ edge-disjoint
 shortest paths in our implementation). The TE decision for demand $i$ is a
 split-ratio vector $r_i \in \mathbb{R}^{\kappa}$, allocating flow
 $f_{i,k} = r_{i,k} \cdot d_i$ to path $p_{i,k}$; the ratios satisfy
-$r_{i,k} \ge 0$ and $\sum_k r_{i,k} = 1$, so every demand is fully served. Main notations are summarized in \cref{tab:notation}.
+$r_{i,k} \ge 0$ and $\sum_k r_{i,k} = 1$, so the full offered demand is
+assigned to candidate paths. This conservation condition does not guarantee
+that the assigned load fits within link capacities. Main notations are
+summarized in \cref{tab:notation}.
 
 \begin{table}[t]
     \caption{Main Notations.}
@@ -66,8 +69,15 @@ service~\cite{sate,hu2022,wei2024}. It minimizes the MLU:
         & r_{i,k} \ge 0,
         && \forall i, k, \label{eq:mlu-nonneg}
 \end{align}
-where \cref{eq:conserve} enforces flow conservation: every demand must
-be fully served, so $\theta$ cannot be lowered by withholding traffic.
+where \cref{eq:conserve} enforces flow conservation: the full offered demand
+enters the load calculation, so $\theta$ cannot be lowered by withholding
+traffic. There is no constraint $\theta \le 1$. An MLU above one indicates
+that the assigned load exceeds capacity on at least one link; an optimum
+$\theta^\star>1$ means that the offered demands cannot all fit within the
+available capacities over the selected candidate paths. The metric measures
+overload rather than delivered throughput. Sustained operation in this
+regime would require additional capacity, admission control, or traffic
+shaping, none of which is modeled here.
 The problem is a linear program solvable to optimality, but at
 constellation scale its solve time exceeds the control epoch~\cite{sate}.
 More fundamentally, the link-load term in \cref{eq:mlu-cap} requires the
@@ -123,11 +133,11 @@ split ratios for \emph{all} active demands,
     \label{eq:policy}
 \end{equation}
 minimizing the \emph{ground-truth} MLU. Let
-$f_{i,k}(\pi) = \tilde{r}_{i,k} \cdot d_i$ denote the flow actually
-delivered on path $p_{i,k}$, where $\{\tilde{r}_i\}$ are the policy's
-ratios after optional neighbor-assisted rebalancing. The ratios remain
+$f_{i,k}(\pi) = \tilde{r}_{i,k} \cdot d_i$ denote the offered load assigned
+to path $p_{i,k}$, where $\{\tilde{r}_i\}$ are the policy's ratios after
+optional neighbor-assisted rebalancing. The ratios remain
 conservation-feasible by \cref{eq:conserve}; the rebalancing only shifts
-traffic among candidate paths to reduce residual overload. The sparse TE
+traffic among candidate paths in an attempt to reduce residual overload. The sparse TE
 objective is
 \begin{equation}
     \min_{\pi} \;
@@ -138,8 +148,8 @@ objective is
 \end{equation}
 where the expectation is over traffic and topology dynamics. The link
 loads are evaluated with the true demands $d_i$: an unmeasured demand still
-consumes real capacity even though the policy could not see it, so
-misjudging it inflates realized MLU. The problem
+contributes to the offered link load even though the policy could not see
+it, so misjudging it can inflate realized MLU. The problem
 is a partially observable sequential decision problem: unlike
 \crefrange{eq:mlu}{eq:mlu-nonneg}, where the same $D^t$ appears in both
 the decision and the constraints, here the decision variables and the

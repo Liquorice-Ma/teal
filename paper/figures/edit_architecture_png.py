@@ -209,5 +209,31 @@ draw.ellipse((OX - OR, OY - OR, OX + OR, OY + OR), outline=(0, 0, 0), width=3)
 ODOT = 3
 draw.ellipse((OX - ODOT, OY - ODOT, OX + ODOT, OY + ODOT), fill=(0, 0, 0))
 
+# (g) MLU 分支没有 ADMM：只重绘右侧后处理区域，保留其余布局。
+# 放大绘制后再缩小，保证标签和连线抗锯齿；该步骤可由底图重复生成。
+PATCH_X, PATCH_Y = 1117, 325
+SCALE = 4
+patch = Image.new('RGB', ((out.width - PATCH_X) * SCALE, 128 * SCALE), WHITE)
+pd = ImageDraw.Draw(patch)
+navy = (27, 64, 81)
+blue = (68, 119, 145)
+pd.rectangle((20*SCALE, 14*SCALE, 141*SCALE, 86*SCALE),
+             fill=(243, 246, 247), outline=navy, width=3*SCALE)
+for x0, x1 in ((0, 20), (141, 163)):
+    pd.line((x0*SCALE, 49*SCALE, (x1-5)*SCALE, 49*SCALE),
+            fill=blue, width=3*SCALE)
+    pd.polygon(((x1*SCALE, 49*SCALE), ((x1-9)*SCALE, 44*SCALE),
+                ((x1-9)*SCALE, 54*SCALE)), fill=blue)
+label_font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', 22*SCALE)
+for text, x, y in (('Neighbor', 80, 37), ('Refinement', 80, 62),
+                   ('Traffic', 205, 37), ('Allocation', 205, 62)):
+    pd.text((x*SCALE, y*SCALE), text, font=label_font,
+            fill=(0, 0, 0), anchor='mm')
+optional_font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', 21*SCALE)
+pd.text((80*SCALE, 108*SCALE), '(optional)', font=optional_font,
+        fill=(70, 70, 70), anchor='mm')
+out.paste(patch.resize((out.width - PATCH_X, 128), Image.Resampling.LANCZOS),
+          (PATCH_X, PATCH_Y))
+
 out.save(DST)
 print('written', DST, out.size)

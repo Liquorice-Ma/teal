@@ -45,12 +45,11 @@ its nearest satellites, and per-pair flows are aggregated into
 satellite-level demands (\cref{tab:tm-stats}). We use 101 consecutive
 snapshots (one every 5 minutes), with snapshots 0--79 for training,
 80--89 for validation, and 90--100 for testing, a strict temporal
-split with no leakage. ISL capacity is calibrated so that the
-fully-observed optimum leaves moderate congestion, keeping TE decisions
-non-trivial; concretely, a path-restricted LP that sees the complete matrix
-attains a realized MLU of ${\approx}1.38$ on the test snapshots, so realized
-utilizations above one are expected and simply indicate an over-subscribed
-busiest link rather than a modeling error. Demand pruning (\cref{sec:scaling})
+split with no leakage. Under the chosen ISL capacities, a path-restricted
+LP with complete traffic information attains a mean MLU of
+${\approx}1.38$ on the test snapshots. The main setting therefore tests load
+balancing under overload, not guaranteed capacity-feasible delivery;
+\cref{sec:complete-te} defines the meaning of MLU above one. Demand pruning (\cref{sec:scaling})
 restricts the modeled
 demand set to the ${\sim}6.3$K pairs that ever carry traffic, out of
 2.5M node pairs.
@@ -79,19 +78,21 @@ demand set to the ${\sim}6.3$K pairs that ever carry traffic, out of
 evaluated against ground-truth demands (lower is better); flow
 conservation in \cref{eq:conserve} is enforced by construction, so MLU
 cannot be gamed by under-serving traffic. We sweep the observation
-ratio $\rho \in \{0.02, 0.05, 0.1, 0.3, 0.5\}$ and run five random
-training seeds per configuration. Unless stated otherwise, every method is
-paired with the \emph{identical deployable post-processing layer}: two
-rebalancing sweeps whose utilization estimate reads only the sparse
-observation with neighbor fill (\textsc{obs-nbr}, \cref{sec:training}),
+ratio $\rho \in \{0.02, 0.05, 0.1, 0.3, 0.5\}$ and use five independent
+experimental repeats per configuration, controlled by random seeds
+0--4. Matching repeat indices use the same seed across methods. Unless
+stated otherwise, every method is paired with the \emph{identical deployable
+post-processing layer}: two rounds of ten rebalancing sweeps, whose
+utilization estimate reads only the sparse observation with neighbor fill
+(\textsc{obs-nbr}, \cref{sec:training}),
 so that no method receives unavailable demand information and the
 allocator remains the only factor that varies. The \textsc{oracle} variant,
 which reads the ground-truth matrix, appears only in the neighbor-estimation
-diagnostic. Each point reported below is the mean MLU over the same eleven
-chronological test snapshots for one training seed. We show all five seed
-points and summarize them by mean$\pm$standard deviation, median, and range.
+diagnostic. Each plotted point is the mean MLU over the same eleven
+chronological test snapshots for one experimental repeat. We show all five
+repeats and summarize them by mean$\pm$standard deviation, median, and range.
 Because the snapshots in a trace are temporally correlated, headline
-comparisons are paired on $(\rho,\text{seed})$, not on snapshots, and are
+comparisons are paired on $(\rho,\text{repeat})$, not on snapshots, and are
 assessed with two-sided sign tests.
 
 \textbf{Baselines.} All learned baselines share the training pipeline,
@@ -119,13 +120,13 @@ only in how they handle sparsity:
     \item \emph{untrained}: the \sysname{} architecture with weights
     frozen at random initialization, isolating the contribution of
     training. It is \emph{not} the LP optimum: the LP (\cref{eq:mlu}) needs
-    the complete matrix and is reported only as a full-information ceiling
-    (MLU~${\approx}1.38$), never as an online, sparsely fed baseline.
+    the complete matrix and serves only as a full-information lower-bound
+    reference for MLU (${\approx}1.38$), not as an online sparse-input baseline.
 \end{itemize}
 
 \begin{table}[t]
     \caption{Model and training hyperparameters (defaults held fixed
-    across all $\rho$ and seeds).}
+    across all $\rho$ and repeats).}
     \label{tab:hparams}
     \centering
     \footnotesize
@@ -147,7 +148,7 @@ only in how they handle sparsity:
         Restart screening & 3 inits \\
         Batch size & 20 \\
         Untrained control & 0 epochs, 1 init \\
-        Neighbor refinement (deployed) & 2 sweeps-of-ten \\
+        Neighbor refinement (deployed) & 2 rounds $\times$ 10 sweeps \\
         \midrule
         Trainable parameters & 4{,}468 \\
         \bottomrule
@@ -156,7 +157,7 @@ only in how they handle sparsity:
 
 \textbf{Implementation.} \Cref{tab:hparams} lists the
 hyperparameters, drawn from the code defaults and held fixed across all
-$\rho$ and seeds. The untrained control shares the trained model's
+$\rho$ and repeats. The untrained control shares the trained model's
 random initialization and differs only in skipping gradient updates
 (\texttt{epochs${=}0$}); it is therefore a clean ablation of the
 \emph{training} factor with identical architecture, mask embedding, and
@@ -165,23 +166,21 @@ post-processing.
 \subsection{Performance of \sysname{}}
 \label{sec:own-results}
 
-We first report how \sysname{} performs on its own terms, before ranking it
-against other treatments. Across observation ratios from $2\%$ to $50\%$, its
-realized MLU stays in the $1.64$--$1.89$ range (the \sysname{} row of
+Across observation ratios from $2\%$ to $50\%$, \sysname{} achieves a
+mean realized MLU in the $1.64$--$1.89$ range (the \sysname{} row of
 \cref{tab:overall}), tightening as more demands become visible: from $1.885$
 at $\rho=0.05$ down to $1.639$ at $\rho=0.5$. To calibrate these numbers we
 solve a path-restricted LP that sees the \emph{complete} matrix on the same
 test snapshots and candidate paths; it attains a full-information optimum of
 MLU~${\approx}1.38$. Observing only a fraction of demands, \sysname{} stays
-within $1.19$--$1.37\times$ of this optimum. All realized MLUs exceed one
-because split ratios are installed without admission control and the ISL
-capacity is calibrated (\cref{sec:setup}) so that even the fully-observed
-optimum is congested: an MLU of $1.7$ denotes $70\%$ over-subscription on the
-busiest link, not a violation of flow conservation, which \cref{eq:conserve}
-enforces by construction. This full-observation LP is a ceiling reference,
-not an online baseline: it is infeasible under sparse measurement and is
-distinct from the \emph{untrained} control of \cref{sec:setup}, which is the
-\sysname{} architecture with random weights.
+within $1.19$--$1.37\times$ of this optimum. An MLU of $1.7$ means that the
+assigned load on the busiest link is $70\%$ above its capacity. Flow
+conservation is maintained, but capacity feasibility is not: the metric
+does not imply that all offered traffic is delivered within the epoch.
+These overloaded-load-balancing results cannot establish delay, loss, or
+admission-control guarantees. The full-observation LP provides a lower bound
+on achievable MLU for the chosen paths, not an online sparse-input baseline;
+it is distinct from the \emph{untrained} control, which uses random weights.
 
 \subsubsection{Inference latency}
 \label{sec:runtime}
@@ -200,7 +199,7 @@ size-invariant architecture on a one-third-scale Shell-1 instance with 528
 satellites and 2{,}112 ISLs. \Cref{tab:cross-scale} isolates the learned
 allocation prior without post-processing at two observation ratios. At
 $\rho=0.05$, training lowers median MLU from $4.02$ to $3.04$ and improves all
-three paired seeds. The result at $\rho=0.3$ is mixed, indicating that the
+three matched repeats. The result at $\rho=0.3$ is mixed, indicating that the
 most informative observation regime shifts with traffic density. The model
 requires no architectural change as the graph and demand-set sizes change,
 which supports reuse across constellation scales while avoiding a claim of
@@ -208,7 +207,7 @@ uniform gains.
 
 \begin{table}[t]
     \caption{Cross-scale check on the 528-satellite instance without
-    post-processing (median MLU and paired training gain over 3 seeds).}
+    post-processing (median MLU and paired training gain over three repeats).}
     \label{tab:cross-scale}
     \centering
     \footnotesize
@@ -227,22 +226,22 @@ uniform gains.
 \label{sec:overall}
 
 We now compare \sysname{} against external sparsity treatments under the
-identical deployable protocol. \Cref{fig:overall-distribution} exposes all
-150 seed-level results, while \cref{tab:overall} gives their numerical
+identical deployable protocol. \Cref{fig:overall-distribution} shows all
+150 results from repeated runs, while \cref{tab:overall} gives their numerical
 summary. No method has a uniform advantage across observation ratios. In
 particular, \sysname{} attains a lower MLU than zero filling on 16 of the 25
-matched $(\rho,\text{seed})$ pairs, but the paired sign test gives
+matched $(\rho,\text{repeat})$ pairs, but the paired sign test gives
 $p=0.2295$; its comparisons with TEST-inspired, mean-interp, nbr-fill, and
 untrained controls are likewise non-significant (\cref{tab:paired}). Hence
-we report the observed rankings and variability rather than claim overall
-superiority.
+the observed rankings must be interpreted together with their variability;
+they do not establish overall superiority.
 
 \begin{figure*}[t]
     \centering
     \includegraphics[width=\textwidth]{figs/overall_distribution.pdf}
-    \caption{Complete external comparison across five training
-    initializations under the same deployed
-    neighbor-assisted refinement. Each marker is one seed's average MLU over
+    \caption{External comparison across five experimental repeats under
+    the same deployed neighbor-assisted refinement. Each marker is one
+    repeat's average MLU over
     the 11 test snapshots; black bars mark means. The dispersion explains why
     column-wise rankings based only on a median are not reliable evidence of
     a general advantage.}
@@ -251,8 +250,8 @@ superiority.
 
 \begin{table*}[t]
     \caption{External comparison under the aligned deployable protocol.
-    Entries are mean$\pm$standard deviation across five training seeds;
-    medians and ranges are reported in the supplementary CSV. Lower MLU is
+    Entries are mean$\pm$standard deviation across five experimental repeats;
+    medians and ranges are included in the supplementary CSV. Lower MLU is
     better.}
     \label{tab:overall}
     \centering
@@ -276,7 +275,7 @@ superiority.
 
 \begin{table}[t]
     \caption{Paired comparison of \sysname{} against each external control
-    over 25 $(\rho,\text{seed})$ pairs. The middle column counts the pairs in
+    over 25 $(\rho,\text{repeat})$ pairs. The middle column counts the pairs in
     which \sysname{} attains the lower MLU (out of 25); there are no ties.
     $p$ is a two-sided sign test.}
     \label{tab:paired}
@@ -302,31 +301,34 @@ superiority.
 \subsubsection{Effect of training}
 We isolate the contribution of training by comparing \sysname{} with its
 untrained counterpart under the common neighbor-assisted refinement.
-\Cref{fig:internal-training} plots all five seed-level test averages for both.
-Training attains the lower MLU in 14 of the 25 matched $(\rho,\text{seed})$
+\Cref{fig:internal-training} plots the five test averages for each condition,
+one per experimental repeat.
+Training attains the lower MLU in 14 of the 25 matched $(\rho,\text{repeat})$
 pairs and the higher in 11, with no ties (two-sided sign test $p=0.690$). At
 $\rho=0.5$, for example, the mean is $1.639\pm0.074$ after training versus
 $1.757\pm0.107$ without training; at the other ratios the paired outcomes are
 mixed. Thus these data do not establish a statistically significant
-end-to-end training advantage, but they expose the seed sensitivity that a
+end-to-end training advantage, but they expose the initialization sensitivity that a
 single aggregate score would hide.
 
 \begin{figure*}[t]
     \centering
     \includegraphics[width=\textwidth]{figs/internal_training.pdf}
-    \caption{Internal check of the deployed pipeline. Every marker is one
-    training seed averaged over the same 11 chronological test snapshots;
-    a gray segment pairs identical seeds and a black bar marks the mean.
-    The common neighbor-assisted refinement is enabled for both endpoints.}
+    \caption{Effect of training under identical neighbor-assisted refinement.
+    Gray dots denote the untrained control and blue dots denote \sysname{}.
+    Each dot is one repeat's mean MLU over the same 11 test snapshots; slight
+    horizontal offsets distinguish the five repeats, and black bars mark
+    their means. Matching repeats share a random seed; no connecting lines
+    are drawn.}
     \label{fig:internal-training}
 \end{figure*}
 
 \subsubsection{Representation components}
 We next test the three representation choices without post-processing at the
 two sparsest ratios, where their effect is least likely to be hidden by
-rebalancing. \Cref{fig:component-lowrho} reports every available seed. The
+rebalancing. \Cref{fig:component-lowrho} shows each experimental repeat. The
 outcomes are mixed: no configuration dominates the others at both ratios,
-and the three-seed diagnostic is insufficient for a component-level
+and the three-repeat diagnostic is insufficient for a component-level
 performance claim. We therefore retain the placeholder-isolation result of
 \cref{prop:isolation} as a structural property, rather than interpreting it
 as proof that gating, masking, or temporal encoding always lowers MLU.
@@ -335,9 +337,10 @@ as proof that gating, masking, or temporal encoding always lowers MLU.
     \centering
     \includegraphics[width=0.76\textwidth]{figs/component_lowrho.pdf}
     \caption{Low-observability component diagnostic without post-processing
-    (three seeds). Dots are seed-level test averages and black bars are
-    means. The mixed ordering motivates reporting the module choices as
-    design alternatives rather than claiming a uniform component gain.}
+    (three experimental repeats). Dots are test averages from individual
+    repeats and black bars are means. The mixed ordering supports treating
+    the module choices as design alternatives rather than assuming a uniform
+    component gain.}
     \label{fig:component-lowrho}
 \end{figure*}
 
@@ -345,23 +348,23 @@ as proof that gating, masking, or temporal encoding always lowers MLU.
 \label{sec:neighbor-estimate}
 The optional refinement pass needs an estimated traffic matrix only to rank
 candidate paths by congestion. \Cref{fig:neighbor-ladder} fixes the
-untrained control at $\rho=0.3$ and shows all three diagnostic seeds.
+untrained control at $\rho=0.3$ and shows all three experimental repeats.
 Moving from no post-processing (median $2.833$) to an observation with zeros
 elsewhere ($2.295$), and then to the source-neighbor estimate ($1.740$),
 substantially changes the congestion signal available to the rebalancer. The
 oracle reference reaches $1.599$, but uses unavailable ground-truth traffic
-and five sweeps; it is a ceiling reference rather than a protocol-matched
-baseline. The deployable conclusion is therefore limited to the value of the
+and five rounds of ten sweeps; it is a full-information diagnostic rather
+than a protocol-matched baseline. The deployable conclusion is therefore limited to the value of the
 neighbor estimate over zero filling, not a claim that post-processing is the
 central learned mechanism.
 
 \begin{figure}[t]
     \centering
     \includegraphics[width=\linewidth]{figs/neighbor_ladder.pdf}
-    \caption{Seed-level diagnostic for the traffic estimate used by
-    post-processing at $\rho=0.3$. Black bars denote medians. The oracle
-    point is an unavailable five-sweep reference; deployed methods use the
-    observation-derived estimate.}
+    \caption{Sensitivity to the traffic estimate used by post-processing at
+    $\rho=0.3$. Each dot is one experimental repeat; black bars denote medians.
+    The oracle uses unavailable complete traffic and five rounds of ten
+    sweeps; deployed methods use an observation-derived estimate.}
     \label{fig:neighbor-ladder}
 \end{figure}
 
@@ -369,9 +372,8 @@ central learned mechanism.
 \label{sec:takeaways}
 
 \begin{itemize}
-    \item The full distribution over training initializations, not a
-    column-wise median,
-    is required to interpret sparse-observation TE: none of \sysname{}'s
+    \item The distribution across experimental repeats, not a column-wise
+    median, is required to interpret sparse-observation TE: none of \sysname{}'s
     external pairwise comparisons is statistically significant.
     \item Training and the three representation choices show mixed outcomes
     in the available internal diagnostics; the architecture's structural
