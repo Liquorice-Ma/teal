@@ -198,5 +198,16 @@ draw = ImageDraw.Draw(out)
 font = ImageFont.truetype('/System/Library/Fonts/Helvetica.ttc', 33)
 draw.text((986, 299 + DIA_DY), '3', font=font, fill=(126, 46, 84))
 
+# (f) replace the ASCII "(x)" in the header "O = D (x) M" with a proper
+#     element-wise product symbol (odot, circle with a centred dot) so the
+#     figure matches the formulation notation O^t = D^t \odot M.  The glyphs
+#     span x 150-182, y 167-194 (caps 167-188); the D..M gap is centred at
+#     x=166, and rows 195-205 are clean white above the grid border at y=206.
+draw.rectangle((147, 164, 185, 197), fill=WHITE)     # wipe the old "(x)"
+OX, OY, OR = 166, 178, 11                            # centre + radius of odot
+draw.ellipse((OX - OR, OY - OR, OX + OR, OY + OR), outline=(0, 0, 0), width=3)
+ODOT = 3
+draw.ellipse((OX - ODOT, OY - ODOT, OX + ODOT, OY + ODOT), fill=(0, 0, 0))
+
 out.save(DST)
 print('written', DST, out.size)
