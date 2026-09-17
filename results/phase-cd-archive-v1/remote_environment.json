@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "captured_from": "/root/autodl-tmp/MZN/teal",
+  "git_head": "15eb96d8ae9e22817126480f0b3765e3f336ffc4",
+  "torch_version": "2.5.1+cu121",
+  "working_tree_was_dirty": true,
+  "relevant_file_sha256": {
+    "run/teal.py": "4ca7ffb509c952047170105e80fce53739a470d839d9c2218d3f1e3ee1f03d51",
+    "run/teal_helper.py": "78bb6bb0d52844e0def8fb07f5291648cbe8d8e41cbb0a512ab676c0ab6d7fda",
+    "run/run_norepair_main.sh": "488bc94c1c6fb09074f92c13eb65ea477564d9164c87da5bfbdf61072e5b2a6f",
+    "lib/teal_env.py": "182cb1abb67a6371832dc8a17c1698fbb9ade62334b8ef823e8acfc3cdbe38b7",
+    "lib/teal_actor.py": "5e62f762fefe2db2bd4eea2035ff7494477ed29ced218cb65c03185d37e503b7",
+    "lib/teal_model.py": "8f234a687b6dc9d675a738cd645288c86b64bbd83d782516feb663876a50928e"
+  },
+  "retry_results": {
+    "remote_path": "/root/autodl-tmp/MZN/phase-c-retry-v2/results/retry_results.csv",
+    "remote_sha256": "eef6b1695fccdcfda866f4b1f47deca3e48027ffb02fe59f8f597bb5a2e8aac0",
+    "transfer_note": "受本地传输通道限制，归档CSV按远端csv.DictReader逐字段核验后写入；行结束符由远端CRLF规范化为本地LF，故字节哈希不同。"
+  },
+  "note": "远端工作树含既有未提交改动；归档结果只能与上述文件哈希对应，不能声明与本地工作树逐位相同。"
+}

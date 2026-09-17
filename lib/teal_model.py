@@ -15,11 +15,12 @@ from torch.utils.data import DataLoader
 from .teal_actor import TealActor
 from .teal_env import TealEnv
 from .utils import print_
+from .revision_protocol import state_digest
 
 
 class Teal():
     def __init__(self, teal_env, teal_actor, lr, early_stop,
-                 eval_admm_steps=0):
+                 eval_admm_steps=0, eval_only=False):
         """Initialize Teal model.
 
         Args:
@@ -36,7 +37,9 @@ class Teal():
 
         # init optimizer
         self.base_lr = lr
-        self.actor_optimizer = optim.Adam(self.actor.parameters(), lr=lr)
+        self.eval_only = eval_only
+        self.trained_epochs = 0
+        self.actor_optimizer = None if eval_only else optim.Adam(self.actor.parameters(), lr=lr)
         # cosine decay to lr/10: the MLU reward needs a large initial lr
         # to make progress, but oscillates without annealing
         self.actor_scheduler = None
@@ -66,6 +69,8 @@ class Teal():
             warmup_epoch: epochs per candidate during screening
         """
 
+        if self.eval_only:
+            raise RuntimeError('eval-only 禁止训练')
         if num_restart > 1:
             self._select_init(
                 num_restart, warmup_epoch, batch_size, num_sample)
@@ -119,6 +124,8 @@ class Teal():
 
         for epoch in range(num_epoch):
 
+            if self.env.input_lag:
+                self.actor.train()
             if self.actor_scheduler is None:
                 self.actor_scheduler = optim.lr_scheduler.CosineAnnealingLR(
                     self.actor_optimizer, T_max=max(num_epoch, 1),
@@ -152,6 +159,7 @@ class Teal():
                 self.actor_optimizer.step()
                 # break
             self.actor_scheduler.step()
+            self.trained_epochs += 1
 
             # early stop
             if track_best and self.early_stop:
@@ -221,6 +229,7 @@ class Teal():
             output_dir: directory to save output solution
         """
 
+        weights_before = state_digest(self.actor.state_dict())
         self.actor.eval()
         self.env.reset('test')
         # reload graph: with demand_split the test-time demand set is
@@ -293,3 +302,5 @@ class Teal():
                     runtime)
                 print_(result_line, file=results)
                 # break
+        if state_digest(self.actor.state_dict()) != weights_before:
+            raise RuntimeError('测试改变了模型权重，结果无效')

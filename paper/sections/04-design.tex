@@ -78,8 +78,10 @@ $\phi \in \mathbb{R}^{\kappa}$ (one scalar per candidate path):
 \end{equation}
 so the model learns a data-driven prior for missing traffic during
 end-to-end training, and, critically, the input itself distinguishes
-``not measured'' from ``zero''. Learnable imputation has proven effective
-for incomplete graph features~\cite{t2gnn}; we bring it to TE, where the
+``not measured'' from ``zero''. A learned placeholder token is the same
+device that masked language models use to mark positions withheld from the
+input~\cite{devlin2019}. Learnable imputation has proven effective
+for incomplete graph features~\cite{t2gnn,you2020}; we bring it to TE, where the
 imputed value directly steers resource allocation. The embedding is trained
 jointly with the policy under the TE objective in \cref{eq:rl-obj} rather than
 a reconstruction loss, so $\phi$ converges to values that maximize
@@ -114,7 +116,11 @@ where $M_p$ is the demand-level mask lifted to path $p$. Unmeasured demands
 thus remain \emph{listeners}: they sense link states, which are shaped by
 measured traffic, but inject no fabricated volume into them. The gate is
 a fixed binary function of the mask with no extra learnable parameters;
-its weights are prepared when the graph is built. The asymmetric gate
+its weights are prepared when the graph is built. It plays the role that
+learned attention coefficients play in attention-based GNNs~\cite{velickovic2018},
+except that here the weighting is dictated by measurement status rather than
+learned, which is what makes the following guarantee exact rather than
+empirical. The asymmetric gate
 yields a formal isolation property:
 
 \begin{proposition}[Placeholder isolation]
@@ -227,6 +233,13 @@ bipartite adjacency consistently; since shared node-wise operators commute
 with permutations and sparse aggregation is index-based, all intermediate
 embeddings, and hence the outputs, are permuted identically.
 \end{IEEEproof}
+
+The proposition places \sysname{} in the same family as inductive graph
+encoders that share node-wise weights to generalize to graphs unseen in
+training~\cite{hamilton2017} and as permutation-invariant set
+architectures~\cite{zaheer2017}. The distinction is what varies at
+deployment: not only the graph, but the demand set itself, which drifts as
+footprints move.
 
 \subsection{Training and Neighbor-Assisted Refinement}
 \label{sec:training}

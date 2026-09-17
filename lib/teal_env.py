@@ -16,6 +16,7 @@ from torch.distributions.uniform import Uniform
 
 from .config import TOPOLOGIES_DIR
 from .ADMM import ADMM
+from .revision_protocol import history_indices
 from .path_utils import find_paths, graph_copy_with_edge_weights, remove_cycles
 
 
@@ -30,7 +31,8 @@ class TealEnv(object):
             demand_split=False, test_topo=None,
             num_reward_edge=1, reward_temperature=0.01,
             repair_input='oracle',
-            raw_action_min=-10.0, raw_action_max=10.0):
+            raw_action_min=-10.0, raw_action_max=10.0,
+            obs_seed=0, test_obs_ratio=None, input_lag=0):
         """Initialize Teal environment.
 
         Args:
@@ -84,6 +86,16 @@ class TealEnv(object):
 
         # sparse observation: observed ratio and history window length
         self.obs_ratio = obs_ratio
+        self.train_obs_ratio = obs_ratio
+        self.test_obs_ratio = obs_ratio if test_obs_ratio is None else test_obs_ratio
+        self.obs_seed = obs_seed
+        self.input_lag = input_lag
+        if not all(0 < r <= 1 for r in (self.train_obs_ratio, self.test_obs_ratio)):
+            raise ValueError('观测率必须在 (0,1] 内')
+        if input_lag not in (0, 1) or hist_len < 1:
+            raise ValueError('无效的历史输入配置')
+        if input_lag and (prune_demands or demand_split or obs_sample != 'uniform'):
+            raise ValueError('预测域不能用未来非零需求或体积建立输入身份')
         self.obs_type = obs_type
         self.obs_sample = obs_sample
         self.hist_len = hist_len
@@ -152,6 +164,11 @@ class TealEnv(object):
     def reset(self, mode='test'):
         """Reset the initial conditions in the beginning."""
 
+        if mode not in ('train', 'val', 'test'):
+            raise ValueError('未知环境模式')
+        target_ratio = self.test_obs_ratio if mode == 'test' else self.train_obs_ratio
+        ratio_changed = target_ratio != self.obs_ratio
+        self.obs_ratio = target_ratio
         if mode == 'train':
             self.idx_start, self.idx_stop = self.train_start, self.train_stop
         elif mode == 'test':
@@ -182,6 +199,8 @@ class TealEnv(object):
         if rebuild:
             self._build_graph(self._get_demand_pairs(
                 self.prune_demands, self.pair_range))
+        elif ratio_changed:
+            self.obs_mask = self._init_obs_mask()
         self.idx = self.idx_start
         self.obs = self._read_obs()
 
@@ -216,7 +235,7 @@ class TealEnv(object):
 
         if self.obs_ratio >= 1.0:
             return torch.ones(self.num_demand).to(self.device)
-        generator = torch.Generator().manual_seed(0)
+        generator = torch.Generator().manual_seed(self.obs_seed)
         if self.obs_type == 'node':
             num_node = self.G.number_of_nodes()
             num_observed = max(1, int(round(num_node * self.obs_ratio)))
@@ -340,13 +359,12 @@ class TealEnv(object):
         hist_tms = []
         # demand-level mask expanded to path level
         path_mask = self.obs_mask.repeat_interleave(self.num_path)
-        for step_back in range(self.hist_len - 1, -1, -1):
-            idx = self.idx - step_back
-            # pad with the earliest tm in the slice at the beginning
-            if idx < self.idx_start:
-                idx = self.idx_start
-            _, _, tm_fname = self.problems[idx]
-            tm = self._read_tm(tm_fname).to(self.device)
+        for idx in history_indices(self.idx, self.hist_len, self.input_lag, self.idx_start):
+            if idx is None:
+                tm = torch.zeros(self.num_path_node, device=self.device)
+            else:
+                _, _, tm_fname = self.problems[idx]
+                tm = self._read_tm(tm_fname).to(self.device)
             hist_tms.append(tm * path_mask)
         return hist_tms
 
@@ -389,6 +407,8 @@ class TealEnv(object):
             num_admm_step: number of ADMM steps during testing
         """
 
+        if self.input_lag and num_admm_step:
+            raise ValueError('严格历史预测不允许读取当前真值的后处理')
         info = {}
         if self.idx_start == self.train_start:
             reward = self.take_action(raw_action, num_sample)

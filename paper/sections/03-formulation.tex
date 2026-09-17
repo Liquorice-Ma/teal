@@ -95,30 +95,36 @@ not ($M_i = 0$), and the controller receives the sparse observation
     O^t = D^t \odot M, \quad \text{together with } M \text{ itself},
     \label{eq:obs}
 \end{equation}
-where $\odot$ is the element-wise product. \Cref{fig:sparse-tm} contrasts a
-ground-truth traffic matrix from our Starlink trace with its node-level
-sparse observation. We consider two measurement
-granularities: \emph{flow-level}, where a fraction $\rho$ of demand pairs is
-sampled, and \emph{node-level}, where a fraction $\rho$ of satellites meter
-all their outgoing demands; the latter matches deployments where
-measurement capability resides on a subset of satellites. The controller
+where $\odot$ is the element-wise product. We consider two measurement
+granularities. Under \emph{flow-level} metering a fraction $\rho$ of the
+active demand pairs is sampled, so the hidden entries are scattered across
+the matrix. Under \emph{node-level} metering a fraction $\rho$ of satellites
+meters all of their outgoing demands, which matches deployments where
+measurement capability resides on a subset of satellites; an unmeasured
+source then hides an entire demand row at once. \Cref{fig:sparse-tm}
+contrasts both against the ground-truth matrix from our Starlink trace: at
+the same $\rho$ they hide a comparable number of demands but differ in
+structure. The controller
 additionally retains the last $L$ sparse observations
 $H^t = (O^{t-L+1}, \ldots, O^t)$.
 
-\begin{figure}[t]
+\begin{figure*}[t]
     \centering
-    \includegraphics[width=\linewidth]{figures/sparse-tm.pdf}
-    \caption{Sparse observation is structured, not random. \textbf{(a)} A
-    ground-truth traffic matrix from the Starlink $22{\times}72$ trace (150
-    busiest satellites shown); traffic concentrates on a few
-    source-destination pairs. \textbf{(b)} Its node-level sparse observation:
-    white cells carry no traffic, gray rows are unmeasured source satellites
-    whose entire demand row is hidden, and colored cells are observed demands.
-    Because metering is per satellite, one unmeasured node removes a whole row
-    at once, so the controller must allocate demands it has never seen rather
-    than fill in scattered missing entries.}
+    \includegraphics[width=\textwidth]{figures/sparse-tm.pdf}
+    \caption{Traffic and observation are both sparse, and the two metering
+    granularities hide demands differently. \textbf{(a)} A ground-truth
+    traffic matrix from the Starlink $22{\times}72$ trace (100 busiest
+    satellites shown); traffic concentrates on a few source--destination
+    pairs. \textbf{(b)} Flow-level metering hides scattered demands (dark
+    gray) and leaves the rest observed (colored). \textbf{(c)} Node-level
+    metering hides demands by source: light gray bands are satellites that
+    perform no metering, so their entire demand row is unavailable. At
+    $\rho=0.5$ the two panels hide a comparable number of demands, but
+    node-level metering removes them in whole rows, so the controller must
+    allocate demands it has never seen rather than fill in isolated missing
+    entries.}
     \label{fig:sparse-tm}
-\end{figure}
+\end{figure*}
 
 \subsubsection{Problem Statement}
 A key observation makes decision-making under unknown demands physically

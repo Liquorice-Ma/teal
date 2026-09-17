@@ -12,6 +12,7 @@ from torch.distributions.multinomial import Multinomial
 from .FlowGNN import FlowGNN
 from .TemporalEncoder import TemporalEncoder
 from .utils import weight_initialization, print_
+from .revision_protocol import check_checkpoint
 
 
 class TealActor(nn.Module):
@@ -19,7 +20,8 @@ class TealActor(nn.Module):
     def __init__(
             self, teal_env, num_layer, model_dir, model_save, device,
             mask_mode='embed', gate=True, mask_init=57.0,
-            std=1, log_std_min=-10.0, log_std_max=10.0):
+            std=1, log_std_min=-10.0, log_std_max=10.0,
+            checkpoint=None, checkpoint_config=None, auto_load=True):
         """Initialize teal actor.
 
         Args:
@@ -108,8 +110,15 @@ class TealActor(nn.Module):
         self.model_fname = self.model_full_fname(
             model_dir, self.env.topo, num_layer, std)
         self.model_save = model_save
-        # load model
-        self.load_model()
+        # 新协议只允许显式加载，不能命中旧文件后静默复用其他 seed 的模型。
+        if checkpoint is not None:
+            payload = torch.load(checkpoint, map_location=device, weights_only=True)
+            check_checkpoint(payload, checkpoint_config)
+            self.load_state_dict(payload['state_dict'], strict=True)
+        elif auto_load:
+            self.load_model()
+        else:
+            self.apply(weight_initialization)
 
     def model_full_fname(self, model_dir, topo, num_layer, std):
         """Return full name of the ML model."""
@@ -236,7 +245,7 @@ class TealActor(nn.Module):
                 self.num_path) * (1 - path_mask)
         elif self.mask_mode == 'mean':
             # mean interpolation: two-stage complete-then-optimize baseline
-            tm = tm + tm.sum()/path_mask.sum() * (1 - path_mask)
+            tm = tm + tm.sum()/path_mask.sum().clamp(min=1) * (1 - path_mask)
         feature = torch.concat([obs['capacity'], tm]).reshape(-1, 1)
         mean, std = self.forward(feature, obs['tm_seq'])
 

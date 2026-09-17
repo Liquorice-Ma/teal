@@ -1,0 +1,9 @@
+# 独立数据/数值预检环境，已在 Python 3.13.13 验证；不安装到现有实验环境。
+numpy==2.5.3
+scipy==1.18.1
+networkx==3.6.1
+sgp4==2.27
+pytest==9.1.1
+# Teal CPU 集成测试还需 torch、torch-scatter、torch-sparse、tqdm。
+# 本轮实测：torch 2.14.0、torch-scatter 2.1.2、torch-sparse 0.6.18、tqdm 4.70.1。
+# CUDA 训练环境须单独预检，不复用此处的 CPU 构建产物。

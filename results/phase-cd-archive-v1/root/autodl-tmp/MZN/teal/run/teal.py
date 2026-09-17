@@ -5,8 +5,6 @@ from teal_helper import get_args_and_problems, print_, PATH_FORM_HYPERPARAMS
 import os
 import sys
 import random
-import json
-from pathlib import Path
 
 import numpy as np
 import torch
@@ -16,7 +14,6 @@ sys.path.append('..')
 from lib.teal_env import TealEnv
 from lib.teal_actor import TealActor
 from lib.teal_model import Teal
-from lib.revision_protocol import experiment_config, file_digest, save_checkpoint, state_digest
 
 
 TOP_DIR = "teal-logs"
@@ -41,22 +38,13 @@ HEADERS = [
 OUTPUT_CSV_TEMPLATE = "teal-{}-{}.csv"
 
 
-def benchmark(problems, output_csv, args):
+def benchmark(problems, output_csv, arg):
 
-    output_dir = TOP_DIR
-    checkpoint_config = None
-    if args.run_id:
-        output_dir = os.path.join(TOP_DIR, args.run_id)
-        os.makedirs(output_dir, exist_ok=False)
-        checkpoint_config = experiment_config(args, problems)
-        with open(os.path.join(output_dir, 'run.json'), 'x') as stream:
-            json.dump(dict(config=checkpoint_config, arguments=vars(args), status='started'),
-                      stream, indent=2)
     num_path, edge_disjoint, dist_metric = PATH_FORM_HYPERPARAMS
     num_path = args.num_path
     edge_disjoint = not args.shared_paths
     obj, topo = args.obj, args.topo
-    model_save = args.model_save and not args.run_id
+    model_save = args.model_save
     device = torch.device(
         f"cuda:{args.devid}" if torch.cuda.is_available() else "cpu")
 
@@ -79,7 +67,7 @@ def benchmark(problems, output_csv, args):
     val_size = [args.slice_val_start, args.slice_val_stop]
     test_size = [args.slice_test_start, args.slice_test_stop]
     # sparse observation hyper-parameters
-    obs_ratio = args.train_obs_ratio
+    obs_ratio = args.obs_ratio
     obs_type = args.obs_type
     obs_sample = args.obs_sample
     hist_len = args.hist_len
@@ -124,10 +112,7 @@ def benchmark(problems, output_csv, args):
         test_topo=test_topo,
         num_reward_edge=args.reward_edges,
         reward_temperature=args.reward_temperature,
-        repair_input=args.repair_input,
-        obs_seed=args.obs_seed,
-        test_obs_ratio=args.test_obs_ratio,
-        input_lag=args.input_lag)
+        repair_input=args.repair_input)
     teal_actor = TealActor(
         teal_env=teal_env,
         num_layer=num_layer,
@@ -136,43 +121,26 @@ def benchmark(problems, output_csv, args):
         device=device,
         mask_mode=mask_mode,
         mask_init=args.mask_init,
-        gate=gate,
-        checkpoint=args.checkpoint if args.eval_only else None,
-        checkpoint_config=checkpoint_config,
-        auto_load=not bool(args.run_id))
+        gate=gate)
     teal = Teal(
         teal_env=teal_env,
         teal_actor=teal_actor,
         lr=lr,
         early_stop=early_stop,
-        eval_admm_steps=num_admm_step,
-        eval_only=args.eval_only)
+        eval_admm_steps=num_admm_step)
 
     # ========== train and test
-    if not args.eval_only:
-        teal.train(
-            num_epoch=num_epoch,
-            batch_size=batch_size,
-            num_sample=num_sample,
-            num_restart=args.num_restart,
-            warmup_epoch=args.warmup_epochs)
-        if args.checkpoint:
-            save_checkpoint(args.checkpoint, teal_actor.state_dict(),
-                            checkpoint_config, teal.trained_epochs)
+    teal.train(
+        num_epoch=num_epoch,
+        batch_size=batch_size,
+        num_sample=num_sample,
+        num_restart=args.num_restart,
+        warmup_epoch=args.warmup_epochs)
     teal.test(
         num_admm_step=num_admm_step,
         output_header=HEADERS,
         output_csv=output_csv,
-        output_dir=output_dir)
-    if args.run_id:
-        with open(os.path.join(output_dir, 'completed.json'), 'x') as stream:
-            json.dump(dict(status='completed', weights_sha256=state_digest(teal_actor.state_dict()),
-                           checkpoint_sha256=file_digest(args.checkpoint),
-                           train_obs_ratio=args.train_obs_ratio, test_obs_ratio=args.test_obs_ratio,
-                           obs_seed=args.obs_seed, input_lag=args.input_lag,
-                           test_target_range=test_size,
-                           input_cutoff='target-1' if args.input_lag else 'target',
-                           post_processing_steps=num_admm_step), stream, indent=2)
+        output_dir=TOP_DIR)
 
     return
 

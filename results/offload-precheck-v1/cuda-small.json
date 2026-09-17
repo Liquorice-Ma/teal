@@ -1,0 +1,105 @@
+{
+  "schema_version": 1,
+  "environment": {
+    "host_available_bytes": 24473665536,
+    "cgroup_limits": [
+      {
+        "path": "/sys/fs/cgroup",
+        "limit_bytes": 64424509440,
+        "used_bytes": 39950843904
+      }
+    ],
+    "torch_version": "2.5.1+cu121",
+    "python": "3.10.20 (main, Jun 11 2026, 15:17:37) [GCC 14.3.0]",
+    "cuda_available": true,
+    "gpu_name": "NVIDIA GeForce RTX 4090 D",
+    "gpu_free_bytes": 8850767872,
+    "gpu_total_bytes": 25250627584
+  },
+  "arguments": {
+    "inspect_only": false,
+    "verify_only": false,
+    "device": "cuda",
+    "dtype": "float64",
+    "nodes": 16,
+    "paths": 4,
+    "history": 3,
+    "width": 128,
+    "chunk_size": 32768,
+    "batch": 1,
+    "steps": 3,
+    "threads": 1,
+    "seed": 0,
+    "output": "/root/autodl-tmp/MZN/offload-precheck-v1/cuda-small.json"
+  },
+  "implementation_sha256": {
+    "precheck_offload.py": "13a76c9d0a743a2dbf6f7593941616021badbd4c74603839140ac18f7421ebf4",
+    "revision_offload.py": "e50394603ada8dbc603966e57064a4a914835c6671ca441324bd6463c805f2cc"
+  },
+  "full_training_gate_passed": false,
+  "equivalence": {
+    "status": "passed",
+    "device": "cuda",
+    "dtype": "torch.float64",
+    "steps": 3,
+    "absolute_tolerance": 1e-11,
+    "relative_tolerance": 1e-09,
+    "max_absolute_errors": {
+      "logits": 1.1102230246251565e-16,
+      "ratios": 5.551115123125783e-17,
+      "mlu": 4.440892098500626e-16,
+      "loss": 0.0,
+      "input_gradient": 5.421010862427522e-20,
+      "weight_gradient": 3.469446951953614e-18,
+      "bias_gradient": 1.3877787807814457e-17,
+      "updated_weight": 2.7755575615628914e-17,
+      "updated_bias": 5.551115123125783e-17,
+      "exp_avg": 2.0057740190981832e-18,
+      "exp_avg_sq": 2.541098841762901e-21
+    }
+  },
+  "benchmark": {
+    "status": "kernel_passed_full_training_gate_still_closed",
+    "estimate": {
+      "pairs": 240,
+      "parameters": 265664,
+      "itemsize": 8,
+      "cpu_parameter_gradient_adam_bytes": 8501248,
+      "largest_weight_shard_bytes": 983040,
+      "saved_linear_input_elements": 2192,
+      "kernel_device_working_estimate_bytes": 4072448,
+      "scope": "MLP_only_excludes_path_graph_and_full_training"
+    },
+    "initialization_seconds": 0.39554158225655556,
+    "steps": [
+      {
+        "step": 0,
+        "forward_seconds": 0.6037696190178394,
+        "backward_seconds": 0.4971175119280815,
+        "adam_seconds": 0.10340110212564468,
+        "total_seconds": 1.2042882330715656
+      },
+      {
+        "step": 1,
+        "forward_seconds": 0.0023646317422389984,
+        "backward_seconds": 0.29814428836107254,
+        "adam_seconds": 0.009759422391653061,
+        "total_seconds": 0.3102683424949646
+      },
+      {
+        "step": 2,
+        "forward_seconds": 0.10855655372142792,
+        "backward_seconds": 0.03541778028011322,
+        "adam_seconds": 0.055977270007133484,
+        "total_seconds": 0.19995160400867462
+      }
+    ],
+    "process_peak_rss_bytes": 932581376,
+    "scope": "synthetic_MLP_kernel_not_full_routing_or_experiment",
+    "cpu_threads": 1,
+    "precision": "float64",
+    "cuda_peak_allocated_bytes": 18051584,
+    "cuda_peak_reserved_bytes": 23068672
+  },
+  "status": "kernel_passed_full_training_gate_still_closed"
+}

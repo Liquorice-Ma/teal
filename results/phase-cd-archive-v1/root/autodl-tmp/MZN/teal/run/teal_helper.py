@@ -3,10 +3,9 @@ from glob import iglob
 
 import argparse
 import os
-import re
 import sys
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+sys.path.append("..")
 
 from lib.config import TOPOLOGIES_DIR, TM_DIR
 
@@ -117,16 +116,6 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
     parser.add_argument(
         '--model-save', type=bool, default=False,
         help='whether to save model')
-
-    # 新协议显式隔离模型、输出和随机条件；旧入口默认行为不变。
-    parser.add_argument('--checkpoint', help='eval-only 时读取可核验权重，训练时保存到此新文件')
-    parser.add_argument('--eval-only', action='store_true', help='只测试，禁止训练和优化器创建')
-    parser.add_argument('--run-id', help='独立实验标识，只允许字母、数字、点、横线和下划线')
-    parser.add_argument('--train-obs-ratio', type=float, default=None)
-    parser.add_argument('--test-obs-ratio', type=float, default=None)
-    parser.add_argument('--obs-seed', type=int, default=0, help='独立于训练 seed 的观测掩码种子')
-    parser.add_argument('--input-lag', type=int, choices=[0, 1], default=0,
-                        help='0含当前观测；1仅用 O[t-h:t] 预测 TM[t]')
 
     # env hyper-parameters
     parser.add_argument(
@@ -279,37 +268,10 @@ def get_args_and_problems(formatted_fname_template, additional_args=[]):
         name_or_flags, kwargs = add_arg[0], add_arg[1]
         parser.add_argument(name_or_flags, **kwargs)
     args = parser.parse_args()
-    if args.train_obs_ratio is None:
-        args.train_obs_ratio = args.obs_ratio
-    if args.test_obs_ratio is None:
-        args.test_obs_ratio = args.train_obs_ratio
-    if not all(0 < r <= 1 for r in (args.train_obs_ratio, args.test_obs_ratio)):
-        parser.error('观测率必须在 (0,1] 内')
-    if args.hist_len < 1 or args.obs_seed < 0:
-        parser.error('hist-len 必须为正，obs-seed 不得为负')
-    if args.run_id and (not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9_.-]*', args.run_id)):
-        parser.error('run-id 含非法字符')
-    if (args.checkpoint or args.eval_only or args.input_lag) and not args.run_id:
-        parser.error('checkpoint、eval-only 和历史预测要求独立 run-id')
-    if args.run_id and not args.eval_only and not args.checkpoint:
-        parser.error('独立训练必须指定 checkpoint 保存路径')
-    if args.eval_only and (not args.checkpoint or not os.path.isfile(args.checkpoint)):
-        parser.error('eval-only 必须指定存在的 checkpoint，不能回退随机权重')
-    if args.checkpoint and not args.eval_only:
-        if args.epochs <= 0:
-            parser.error('保存已训练 checkpoint 要求 epochs > 0')
-        if os.path.exists(args.checkpoint):
-            parser.error('checkpoint 已存在，禁止覆盖或隐式续训')
-    if args.input_lag and (args.prune_demands or args.demand_split or args.obs_sample != 'uniform'):
-        parser.error('历史预测禁止扫描未来非零并集或按未来流量挑选观测项；需独立需求身份适配')
-    if args.input_lag and args.admm_steps:
-        parser.error('历史预测主协议不使用后处理，请设置 --admm-steps 0')
 
     slice_str = "all"  # "slice_" + "_".join(str(i) for i in args.slices)
     formatted_fname_substr = formatted_fname_template.format(
         args.obj, slice_str)
-    if args.run_id:
-        formatted_fname_substr = os.path.join('teal-logs', args.run_id, 'results.csv')
     return args, formatted_fname_substr, get_problems(args)
 
 

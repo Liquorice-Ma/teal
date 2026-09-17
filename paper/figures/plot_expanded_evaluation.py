@@ -127,6 +127,35 @@ def main_distribution(cells):
     finish(fig, "overall_distribution.pdf", left=0.105, bottom=0.34)
 
 
+def main_bars(cells):
+    """主对比的 mean±std 柱状图，取代原先的数值表格。
+
+    纵轴自 1.5 起截断：全部条目落在 1.6--1.95，从 0 起画会把互相重叠的
+    误差棒压成一条线，反而看不出"无方法占优"这一结论。截断在图注中声明。
+    """
+    fig, ax = plt.subplots(figsize=(7.15, 2.45))
+    width = 0.14
+    for idx, method in enumerate(METHODS):
+        centers = [g + (idx - 2.5) * width for g in range(len(RHOS))]
+        means = [mean([cells[method, rho][seed] for seed in range(5)])
+                 for rho in RHOS]
+        stds = [stdev([cells[method, rho][seed] for seed in range(5)])
+                for rho in RHOS]
+        ax.bar(centers, means, width, yerr=stds, capsize=1.8,
+               color=COLORS[method], edgecolor="black", linewidth=0.35,
+               error_kw={"lw": 0.6}, label=LABELS[method], zorder=3)
+    ax.set_ylim(1.5, 2.12)
+    ax.set_xticks(range(len(RHOS)))
+    ax.set_xticklabels([rf"$\rho={rho:g}$" for rho in RHOS])
+    ax.set_ylabel("MLU (mean $\\pm$ s.d.)")
+    ax.grid(axis="y")
+    # 图例放到坐标区之上，否则最高的误差棒会顶到图例文字
+    ax.legend(ncol=6, loc="lower center", bbox_to_anchor=(0.5, 1.01),
+              frameon=False, columnspacing=1.1, handlelength=1.2,
+              handletextpad=0.4)
+    finish(fig, "overall_bars.pdf", left=0.075, bottom=0.14, top=0.88)
+
+
 def internal_training(cells):
     fig, axes = plt.subplots(1, len(RHOS), figsize=(7.15, 2.15), sharey=True)
     for ax, rho in zip(axes, RHOS):
@@ -201,6 +230,7 @@ def main():
     cells = load_main()
     export_data(cells)
     main_distribution(cells)
+    main_bars(cells)
     internal_training(cells)
     component_lowrho()
     neighbor_ladder()

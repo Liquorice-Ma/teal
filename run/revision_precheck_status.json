@@ -1,0 +1,95 @@
+{
+  "schema_version": 1,
+  "status": "blocked_before_full_training",
+  "data_manifest": ".cache/revision/data-precheck-v1/manifest.json",
+  "data_status": "six_unscaled_traces_generated_not_registered_for_training",
+  "snapshots_per_scenario": 432,
+  "common_cities": 99,
+  "retained_population_fraction": 0.9934317080445265,
+  "hypatia_commit": "0ac531c313eba2335f6344b46347140c3a0d4230",
+  "geonames_sha256": "32399fa9c0729d4e342773651acde46d02a5727462d80d26436b1515a1e9a33b",
+  "resource_gate": {
+    "basis": "DOTE fixed all-ordered-satellite-pairs input/output; history=3; hidden=128; paths=4; FP32 parameters+gradients+two Adam states",
+    "starlink_lower_bound_gib": 33.628560066223145,
+    "kuiper_lower_bound_gib": 17.906899213790894,
+    "gpu_budget_gib": 24.0,
+    "required_headroom_fraction": 0.25,
+    "measured_peak": false,
+    "note": "此下界针对全卫星对稠密MLP的FP32布局，不是所有DOTE实现的不可行证明；不含激活、图和临时张量。原DOTE MAXUTIL代码使用FP64，因此同精度状态下界加倍。",
+    "source_precision": "float64",
+    "starlink_fp64_state_lower_bound_gib": 67.25712013244629,
+    "container_memory_limit_gib": 60.0
+  },
+  "baseline_sources": {
+    "dote": {
+      "url": "https://github.com/PredWanTE/DOTE",
+      "commit": "43e628bd457e31958eba4f696e3de869d3e7789e",
+      "license": "root and networking_envs not established; bundled openai_baselines has MIT license",
+      "status": "source_semantics_checked_independent_offload_kernel_verified_not_full_baseline",
+      "model_source": "https://github.com/PredWanTE/DOTE/blob/43e628bd457e31958eba4f696e3de869d3e7789e/dote.py",
+      "maxutil_semantics": {
+        "hidden_widths": [128, 128, 128, 128],
+        "hidden_activation": "ReLU",
+        "path_weights": "sigmoid(logits)+1e-16; normalize over all valid paths of each OD",
+        "training_loss": "mean over samples of m/stop_gradient(m) if m>0, otherwise 1-m; m is max over all edges",
+        "optimizer": "Adam with framework defaults; precheck pins lr=0.001, betas=(0.9,0.999), eps=1e-8, weight_decay=0, foreach=False",
+        "source_precision_device": "FP64; source script does not explicitly move the model to CUDA",
+        "identity": "all ordered non-diagonal OD; zero demands remain in fixed domain"
+      }
+    },
+    "learning_to_route": {
+      "url": "https://conferences.sigcomm.org/hotnets/2017/papers/hotnets17-final28.pdf",
+      "status": "full_formula_and_implementation_equivalence_not_verified",
+      "warning": "DOTE default RL path-weight softmax is not the original hop-by-hop softmin method"
+    }
+  },
+  "verified": [
+    "three_shell_geometry_at_432_sampling_times",
+    "two_shared_ground_traffic_models_and_separate_local_traffic_accounting",
+    "full_sequence_pair_inventory_for_offline_precheck_only",
+    "strict_history_input_excludes_target_TM",
+    "nested_observation_masks_and_GNN_gate_refresh",
+    "real_Teal_CPU_train_save_load_eval_only_with_unchanged_weight_hash",
+    "frozen_path_ratios_with_new_demands_failure_fallback_and_unreachable_reporting",
+    "small_graph_edge_flow_LP_against_hand_computed_MLU",
+    "offload_CPU_FP32_FP64_outputs_gradients_three_Adam_updates_and_optimizer_moments",
+    "offload_CUDA_FP64_small_graph_equivalence_and_16_node_synthetic_kernel",
+    "host_cgroup_budget_and_GPU_headroom_guards_reject_full_Starlink_before_allocation"
+  ],
+  "pending": [
+    "resolve_large_baseline_memory_layout_without_changing_comparison_semantics",
+    "DOTE_sparse_and_Learning_to_Route_baseline_implementation_and_verification",
+    "training_only_LP_calibration_and_dataset_registration",
+    "full_sequence_path_cache_and_all_method_GPU_peak_runtime_measurements",
+    "270_configuration_training_and_extended_evaluation_orchestration",
+    "old_Phase_C_D_results_download_pairing_and_node_coverage_verification",
+    "new_result_figures_and_final_section_5_reorganization"
+  ],
+  "remote_observation": "Existing batch earlier observed with 8 teal.py processes; no existing processes stopped or existing experiment files modified. Two independent probe scripts deployed only to /root/autodl-tmp/MZN/offload-precheck-v1, with a separate venv reading existing PyTorch packages via system-site-packages; no packages installed into original environment. Completed-cell count not verified.",
+  "offload_precheck": {
+    "status": "small_kernel_verified_full_model_blocked_by_host_memory",
+    "module": "lib/revision_offload.py",
+    "entrypoint": "run/precheck_offload.py",
+    "reports": [
+      "results/offload-precheck-v1/cuda-small.json",
+      "results/offload-precheck-v1/starlink-host-budget.json",
+      "results/offload-precheck-v1/starlink-budget.json"
+    ],
+    "CUDA_small_graph_MLU_max_absolute_error": 4.440892098500626e-16,
+    "synthetic_kernel_nodes": 16,
+    "synthetic_kernel_CUDA_peak_allocated_bytes": 18051584,
+    "synthetic_kernel_CUDA_peak_reserved_bytes": 23068672,
+    "synthetic_kernel_step_seconds": [1.2042882330715656, 0.3102683424949646, 0.19995160400867462],
+    "timing_scope": "shared machine with old jobs running; synthetic MLP only, no full path graph; not extrapolated to Starlink or used as paper result",
+    "full_Starlink_allocated": false,
+    "comparison_definition_changed": false,
+    "remaining": "CPU-resident full FP64 parameter/gradient/Adam states exceed the entire 60GiB cgroup limit. Disk-backed states or a larger RAM quota require another independent precheck; full baseline/path-cache/runtime gates remain closed."
+  },
+  "tests": {
+    "command": ".cache/revision/venv/bin/python -m pytest run/test_revision.py -q",
+    "result": "19 passed; 1 existing PyTorch sparse-invariant warning; real CPU PyG dependencies present; no skipped tests",
+    "scope": "small graph, protocol, offload equivalence and budget guards; separate CUDA probe passed; not full-scale training results"
+  },
+  "plan_file_modified": false,
+  "git_commit_or_push_performed": false
+}

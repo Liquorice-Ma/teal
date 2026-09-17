@@ -1,0 +1,76 @@
+{
+  "schema_version": 1,
+  "environment": {
+    "host_available_bytes": 29860061184,
+    "cgroup_limits": [
+      {
+        "path": "/sys/fs/cgroup",
+        "limit_bytes": 64424509440,
+        "used_bytes": 34564448256
+      }
+    ],
+    "torch_version": "2.5.1+cu121",
+    "python": "3.10.20 (main, Jun 11 2026, 15:17:37) [GCC 14.3.0]",
+    "cuda_available": true,
+    "gpu_name": "NVIDIA GeForce RTX 4090 D",
+    "gpu_free_bytes": 17448370176,
+    "gpu_total_bytes": 25250627584
+  },
+  "arguments": {
+    "inspect_only": false,
+    "verify_only": false,
+    "device": "cpu",
+    "dtype": "float64",
+    "nodes": 1584,
+    "paths": 4,
+    "history": 3,
+    "width": 128,
+    "chunk_size": 32768,
+    "batch": 1,
+    "steps": 2,
+    "threads": 1,
+    "seed": 0,
+    "output": "/root/autodl-tmp/MZN/offload-precheck-v1/starlink-host-budget.json"
+  },
+  "implementation_sha256": {
+    "precheck_offload.py": "13a76c9d0a743a2dbf6f7593941616021badbd4c74603839140ac18f7421ebf4",
+    "revision_offload.py": "e50394603ada8dbc603966e57064a4a914835c6671ca441324bd6463c805f2cc"
+  },
+  "full_training_gate_passed": false,
+  "equivalence": {
+    "status": "passed",
+    "device": "cpu",
+    "dtype": "torch.float64",
+    "steps": 3,
+    "absolute_tolerance": 1e-11,
+    "relative_tolerance": 1e-09,
+    "max_absolute_errors": {
+      "logits": 5.551115123125783e-17,
+      "ratios": 5.551115123125783e-17,
+      "mlu": 0.0,
+      "loss": 0.0,
+      "input_gradient": 1.6263032587282567e-19,
+      "weight_gradient": 3.469446951953614e-18,
+      "bias_gradient": 1.3877787807814457e-17,
+      "updated_weight": 1.3877787807814457e-17,
+      "updated_bias": 3.469446951953614e-18,
+      "exp_avg": 8.673617379884035e-19,
+      "exp_avg_sq": 8.470329472543003e-22
+    }
+  },
+  "benchmark": {
+    "status": "blocked_host_budget",
+    "estimate": {
+      "pairs": 2507472,
+      "parameters": 2256774464,
+      "itemsize": 8,
+      "cpu_parameter_gradient_adam_bytes": 72216782848,
+      "largest_weight_shard_bytes": 33554432,
+      "saved_linear_input_elements": 17552816,
+      "kernel_device_working_estimate_bytes": 1257597952,
+      "scope": "MLP_only_excludes_path_graph_and_full_training"
+    },
+    "required_host_bytes": 92602318336
+  },
+  "status": "blocked_host_budget"
+}

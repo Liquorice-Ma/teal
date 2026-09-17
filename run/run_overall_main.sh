@@ -22,6 +22,7 @@
 
 cd "$(dirname "$0")"
 PY=/root/autodl-tmp/conda/envs/teal/bin/python
+SUMMARIZER="$(dirname "$0")/summarize_seeds.py"
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
 
 S="--slice-train-start 0 --slice-train-stop 80 --slice-val-start 80 \
@@ -79,12 +80,17 @@ run_one() {
         | grep -oE 'obj=[0-9.]+' | cut -d= -f2)
     [ -z "$out" ] && { echo "[FAIL] $tag"; return; }
 
-    flock "$LOCK" -c \
-        "echo '$cfg,$rho,$seed,$out' >> '$CSV'; echo '$tag' >> '$DONE'"
-    printf '[done] %-30s %s\n' "$tag" "$out"
+    # CSV 继续保存逐 seed 原始结果；终端只显示同一条件的实时均值。
+    {
+        flock -x 9
+        printf '%s,%s,%s,%s\n' "$cfg" "$rho" "$seed" "$out" >> "$CSV"
+        printf '%s\n' "$tag" >> "$DONE"
+        "$PY" "$SUMMARIZER" "$CSV" --expected-seeds 3 \
+            --where "config=$cfg" --where "rho=$rho" --compact
+    } 9>"$LOCK"
 }
 export -f run_one
-export PY COMMON TRAIN UNTRAIN CSV DONE LOCK
+export PY SUMMARIZER COMMON TRAIN UNTRAIN CSV DONE LOCK
 
 # headline operating points first so partial results are usable early
 TASKS=()

@@ -1,8 +1,7 @@
 \section{Evaluation}
 \label{sec:eval}
 
-% 评估章节：Setup → 整体对比 → 稀疏感知分配器隔离实验 →
-% 邻居估算敏感性 → 跨规模 → 延迟 → takeaways。
+% 新基线与多星座实验通过预检后再回填；当前保留已有结果及其适用边界。
 
 \subsection{Setup}
 \label{sec:setup}
@@ -93,11 +92,17 @@ chronological test snapshots for one experimental repeat. We show all five
 repeats and summarize them by mean$\pm$standard deviation, median, and range.
 Because the snapshots in a trace are temporally correlated, headline
 comparisons are paired on $(\rho,\text{repeat})$, not on snapshots, and are
-assessed with two-sided sign tests.
+assessed with two-sided sign tests. To isolate the allocator from this shared
+layer, we additionally rerun the full $6\mathbin{\times}5\mathbin{\times}5$
+matrix with refinement disabled. Separately, we pair source-row
+(node-level) metering with the same flow-level deployable cells for three
+methods, three observation ratios, and seeds 0--2. These two diagnostics are
+reported separately from the deployed main comparison.
 
-\textbf{Baselines.} All learned baselines share the training pipeline,
-path sets, and optional neighbor-assisted refinement of \sysname{} and differ
-only in how they handle sparsity:
+\textbf{Controlled comparisons.} The learned variants below share the
+training pipeline, path sets, and optional neighbor-assisted refinement of
+\sysname{}. They isolate sparsity treatments within this implementation;
+they are not independent reproductions of the cited systems:
 \begin{itemize}
     \item \emph{zero-fill}: the sparse adaptation of full-observation
     systems such as Teal~\cite{teal} and SaTE~\cite{sate}, which
@@ -157,7 +162,8 @@ only in how they handle sparsity:
 
 \textbf{Implementation.} \Cref{tab:hparams} lists the
 hyperparameters, drawn from the code defaults and held fixed across all
-$\rho$ and repeats. The untrained control shares the trained model's
+$\rho$ and repeats; all runs use Adam~\cite{kingma2015}. The untrained control
+shares the trained model's
 random initialization and differs only in skipping gradient updates
 (\texttt{epochs${=}0$}); it is therefore a clean ablation of the
 \emph{training} factor with identical architecture, mask embedding, and
@@ -167,8 +173,8 @@ post-processing.
 \label{sec:own-results}
 
 Across observation ratios from $2\%$ to $50\%$, \sysname{} achieves a
-mean realized MLU in the $1.64$--$1.89$ range (the \sysname{} row of
-\cref{tab:overall}), tightening as more demands become visible: from $1.885$
+mean realized MLU in the $1.64$--$1.89$ range (the \sysname{} bars of
+\cref{fig:overall-bars}), tightening as more demands become visible: from $1.885$
 at $\rho=0.05$ down to $1.639$ at $\rho=0.5$. To calibrate these numbers we
 solve a path-restricted LP that sees the \emph{complete} matrix on the same
 test snapshots and candidate paths; it attains a full-information optimum of
@@ -205,6 +211,13 @@ requires no architectural change as the graph and demand-set sizes change,
 which supports reuse across constellation scales while avoiding a claim of
 uniform gains.
 
+This check covers two sizes of a Starlink-like constellation under the
+population-based traffic model of \cref{tab:tm-stats}. It does not establish
+generality across different constellation systems, orbital configurations,
+or traffic-generation methods. Those factors require separately generated
+and evaluated scenarios; changing constellation size alone does not test
+them.
+
 \begin{table}[t]
     \caption{Cross-scale check on the 528-satellite instance without
     post-processing (median MLU and paired training gain over three repeats).}
@@ -225,21 +238,40 @@ uniform gains.
 \subsection{Comparison with Sparsity Treatments}
 \label{sec:overall}
 
-We now compare \sysname{} against external sparsity treatments under the
-identical deployable protocol. \Cref{fig:overall-distribution} shows all
-150 results from repeated runs, while \cref{tab:overall} gives their numerical
-summary. No method has a uniform advantage across observation ratios. In
-particular, \sysname{} attains a lower MLU than zero filling on 16 of the 25
+We now compare \sysname{} against the controlled sparsity-treatment variants
+under the identical deployable protocol. \Cref{fig:overall-bars} summarizes each
+method as a mean with its standard deviation, and
+\cref{fig:overall-distribution} shows the underlying 150 individual repeats.
+The mean rankings vary across observation ratios. The error bars describe
+repeat-to-repeat dispersion; the statistical comparisons below instead use
+matched repeats. In particular, \sysname{} attains a lower MLU than zero
+filling on 16 of the 25
 matched $(\rho,\text{repeat})$ pairs, but the paired sign test gives
 $p=0.2295$; its comparisons with TEST-inspired, mean-interp, nbr-fill, and
 untrained controls are likewise non-significant (\cref{tab:paired}). Hence
 the observed rankings must be interpreted together with their variability;
 they do not establish overall superiority.
 
+The shared neighbor-assisted refinement can redirect traffic away from
+overloaded paths regardless of which allocator produced the initial split. We
+therefore reran all six variants without post-processing: the resulting 150
+cells give an allocator-only diagnostic. Under this protocol, \sysname{}
+has the lower MLU in 16 of 25 pairs against the untrained control
+($p=0.2295$), but only 7 of 25 pairs against each of TEST-inspired and
+mean-interp (unadjusted $p=0.0433$; \cref{tab:no-repair-paired}). The
+no-refinement ordering thus does not support a uniform allocator advantage;
+it also differs from the deployed ordering. This controlled contrast shows
+that the refinement layer is material to the end-to-end outcome, but it does
+not attribute a separate causal contribution to each learned component.
+Initialization variability is another contributor to the mixed rankings. We
+therefore distinguish end-to-end results under refinement from allocator-only
+component diagnostics (\cref{sec:allocator-isolation}), rather than treating
+either as evidence of uniform superiority.
+
 \begin{figure*}[t]
     \centering
     \includegraphics[width=\textwidth]{figs/overall_distribution.pdf}
-    \caption{External comparison across five experimental repeats under
+    \caption{Controlled sparsity-treatment comparison across five experimental repeats under
     the same deployed neighbor-assisted refinement. Each marker is one
     repeat's average MLU over
     the 11 test snapshots; black bars mark means. The dispersion explains why
@@ -248,33 +280,20 @@ they do not establish overall superiority.
     \label{fig:overall-distribution}
 \end{figure*}
 
-\begin{table*}[t]
-    \caption{External comparison under the aligned deployable protocol.
-    Entries are mean$\pm$standard deviation across five experimental repeats;
-    medians and ranges are included in the supplementary CSV. Lower MLU is
-    better.}
-    \label{tab:overall}
+\begin{figure*}[t]
     \centering
-    \scriptsize
-    \setlength{\tabcolsep}{5pt}
-    \begin{tabular}{@{}lccccc@{}}
-        \toprule
-        & \multicolumn{5}{c}{observation ratio $\rho$} \\
-        \cmidrule(lr){2-6}
-        Method & 0.02 & 0.05 & 0.1 & 0.3 & 0.5 \\
-        \midrule
-        \sysname{} & $1.874\pm0.203$ & $1.885\pm0.093$ & $1.786\pm0.089$ & $1.737\pm0.085$ & $1.639\pm0.074$ \\
-        TEST-inspired~\cite{test} & $1.809\pm0.100$ & $1.833\pm0.145$ & $1.773\pm0.083$ & $1.769\pm0.056$ & $1.639\pm0.127$ \\
-        zero-fill~\cite{teal,sate} & $1.805\pm0.026$ & $1.876\pm0.061$ & $1.856\pm0.065$ & $1.719\pm0.038$ & $1.705\pm0.142$ \\
-        mean-interp & $1.877\pm0.152$ & $1.840\pm0.035$ & $1.939\pm0.103$ & $1.732\pm0.050$ & $1.682\pm0.091$ \\
-        nbr-fill & $1.756\pm0.079$ & $1.867\pm0.038$ & $1.839\pm0.078$ & $1.745\pm0.054$ & $1.680\pm0.114$ \\
-        untrained & $1.890\pm0.073$ & $1.902\pm0.121$ & $1.781\pm0.068$ & $1.716\pm0.044$ & $1.757\pm0.107$ \\
-        \bottomrule
-    \end{tabular}
-\end{table*}
+    \includegraphics[width=\textwidth]{figs/overall_bars.pdf}
+    \caption{Controlled sparsity-treatment comparison under the aligned
+    deployable protocol. Bars are means over five experimental repeats and
+    whiskers are one standard deviation. The vertical axis is truncated at
+    $1.5$; bar heights above the baseline must not be interpreted as
+    proportional improvements. Lower MLU is better. Statistical comparisons
+    use paired repeats (\cref{tab:paired}), not error-bar overlap.}
+    \label{fig:overall-bars}
+\end{figure*}
 
 \begin{table}[t]
-    \caption{Paired comparison of \sysname{} against each external control
+    \caption{Paired comparison of \sysname{} against each controlled variant
     over 25 $(\rho,\text{repeat})$ pairs. The middle column counts the pairs in
     which \sysname{} attains the lower MLU (out of 25); there are no ties.
     $p$ is a two-sided sign test.}
@@ -291,6 +310,28 @@ they do not establish overall superiority.
         mean-interp & 16 & 0.2295 \\
         nbr-fill & 15 & 0.4244 \\
         untrained & 14 & 0.6900 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\begin{table}[t]
+    \caption{Allocator-only comparison with refinement disabled, aggregated
+    over the same 25 $(\rho,\text{repeat})$ pairs. The middle column counts
+    pairs where \sysname{} has lower MLU. Values are unadjusted two-sided
+    sign tests and are reported descriptively across the five ratios.}
+    \label{tab:no-repair-paired}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{4pt}
+    \begin{tabular}{@{}lcc@{}}
+        \toprule
+        Control & \sysname{} lower / 25 & $p$ \\
+        \midrule
+        TEST-inspired & 7 & 0.0433 \\
+        zero-fill & 8 & 0.1078 \\
+        mean-interp & 7 & 0.0433 \\
+        nbr-fill & 9 & 0.2295 \\
+        untrained & 16 & 0.2295 \\
         \bottomrule
     \end{tabular}
 \end{table}
@@ -322,6 +363,39 @@ single aggregate score would hide.
     are drawn.}
     \label{fig:internal-training}
 \end{figure*}
+
+\subsubsection{Metering granularity}
+\label{sec:metering-granularity}
+We next compare the deployed protocol under flow-level metering and
+node-level metering, where observing a source reveals its entire outgoing
+demand row. Each entry in \cref{tab:node-flow} is a mean difference over the
+same three seeds; positive values mean that node-level metering gives higher
+(worse) MLU. The two masks expose nearly the same fractions of eligible
+pairs, while their observed test-volume fractions are $10.6\%$, $30.0\%$,
+and $49.8\%$ for node-level metering at $\rho=0.1$, $0.3$, and $0.5$
+(respectively $11.6\%$, $30.6\%$, and $51.1\%$ for flow-level metering).
+The paired differences change sign across methods and ratios. Hence this
+three-seed diagnostic neither establishes that source-row metering is always
+harder nor that \sysname{} has a node-level advantage.
+
+\begin{table}[t]
+    \caption{Paired node-level minus flow-level MLU under the identical
+    deployable protocol (three seeds per cell). Positive values indicate
+    higher MLU under node-level metering.}
+    \label{tab:node-flow}
+    \centering
+    \footnotesize
+    \setlength{\tabcolsep}{5pt}
+    \begin{tabular}{@{}lrrr@{}}
+        \toprule
+        Method & $\rho=0.1$ & $\rho=0.3$ & $\rho=0.5$ \\
+        \midrule
+        \sysname{} & $+0.001$ & $+0.051$ & $+0.107$ \\
+        zero-fill & $-0.116$ & $-0.031$ & $-0.105$ \\
+        untrained & $-0.068$ & $+0.147$ & $-0.016$ \\
+        \bottomrule
+    \end{tabular}
+\end{table}
 
 \subsubsection{Representation components}
 We next test the three representation choices without post-processing at the
@@ -367,18 +441,3 @@ central learned mechanism.
     sweeps; deployed methods use an observation-derived estimate.}
     \label{fig:neighbor-ladder}
 \end{figure}
-
-\subsection{Takeaways}
-\label{sec:takeaways}
-
-\begin{itemize}
-    \item The distribution across experimental repeats, not a column-wise
-    median, is required to interpret sparse-observation TE: none of \sysname{}'s
-    external pairwise comparisons is statistically significant.
-    \item Training and the three representation choices show mixed outcomes
-    in the available internal diagnostics; the architecture's structural
-    properties should not be read as a universal performance guarantee.
-    \item Source-neighbor estimation provides a substantially more useful
-    deployable congestion signal than zero filling in the $\rho=0.3$
-    diagnostic, while the oracle remains an unavailable reference.
-\end{itemize}
